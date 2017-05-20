@@ -13,6 +13,9 @@ Information on python requests can be found at: http://docs.python-requests.org/
 
 Usage: 
 ```python
+import requests
 from requests_agstoken import ArcGISServerTokenAuth
-r=requests.get(r'https://host/arcgis/rest/services',auth=ArcGISServerTokenAuth(username,password))
+r = requests.get(r'https://host/arcgis/rest/services', auth=ArcGISServerTokenAuth(username,password))
 ```
+
+This module is not complete.  Currently it shows success with acquiring an authentication token to authorize access to the services, however each request currently generates a token.  Goal is to persist the token and handle expiring (track token expires or handle 'expired token' responses).  Also need better error handling.  
