@@ -1,16 +1,25 @@
-#-------------------------------------------------------------------------------
-# Name:        module1
-# Purpose:
-#
-# Author:      pfoppe
-#
-# Created:     19/05/2017
-# Copyright:   (c) pfoppe 2017
-# Licence:     <your licence>
-#-------------------------------------------------------------------------------
 
-def main():
-    pass
+import sys,os
+import requests
+import getpass
 
-if __name__ == '__main__':
-    main()
+sys.path.append(os.path.split(os.path.split(os.getcwd())[0])[0])
+from requests_agstoken import ArcGISServerTokenAuth
+
+url=raw_input('Enter ArcGIS for Server "Token Auth" URL: ')
+username="BLM\\"+getpass.getuser()
+password=getpass.getpass("Enter Password for %s: "%username)
+
+
+auth_obj=ArcGISServerTokenAuth(username,password,verify=False)
+
+print("Instance",auth_obj)
+
+r=requests.get(url,verify=False,auth=auth_obj)
+
+print ("Auth Instance: ",auth_obj.instance)
+print ("Status Code: ",r.status_code)
+print ("Response Data: ",r.text)
+print ("Request Method: ",r.request.method)
+print ("Request body: ",r.request.body)
+
