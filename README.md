@@ -24,5 +24,6 @@ from requests_agstoken import ArcGISServerTokenAuth
 s = requests.Session()
 s.auth=ArcGISServerTokenAuth(username,password)
 r = s.get(r'https://host/arcgis/rest/services')
+```
 
 This module is not complete.  Currently it shows success with acquiring an authentication token to authorize access to the services, but has not been used in a production fashion yet.  The authentication handler will track the token expiration and re-request a token if it has expired.  
