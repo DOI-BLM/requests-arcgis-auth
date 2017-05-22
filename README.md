@@ -2,7 +2,6 @@
 
 **Authentication handler for using Esri ArcGIS for Server Token Authentication with Python Requests**
 
-
 ----------
 
 This module provides a python requests authentication handler for the propriatery Esri ArcGIS for Server Token Authentication.  
@@ -11,11 +10,19 @@ Information about the Esri ArcGIS for Server Token authentication can be found a
 
 Information on python requests can be found at: http://docs.python-requests.org/en/master/
 
-Usage: 
+Usage (Non-Session Based): 
 ```python
 import requests
 from requests_agstoken import ArcGISServerTokenAuth
 r = requests.get(r'https://host/arcgis/rest/services', auth=ArcGISServerTokenAuth(username,password))
 ```
 
-This module is not complete.  Currently it shows success with acquiring an authentication token to authorize access to the services, however each request currently generates a token.  Goal is to persist the token and handle expiring (track token expires or handle 'expired token' responses).  Also need better error handling.  
+Usage (Session Based):
+```python
+import requests
+from requests_agstoken import ArcGISServerTokenAuth
+s = requests.Session()
+s.auth=ArcGISServerTokenAuth(username,password)
+r = s.get(r'https://host/arcgis/rest/services')
+
+This module is not complete.  Currently it shows success with acquiring an authentication token to authorize access to the services, but has not been used in a production fashion yet.  The authentication handler will track the token expiration and re-request a token if it has expired.  
