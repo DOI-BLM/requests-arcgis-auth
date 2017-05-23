@@ -17,6 +17,10 @@ print("Instance",auth_obj)
 
 r=requests.get(url,verify=False,auth=auth_obj)
 
+
+
+
+
 print ("Auth Instance: ",auth_obj.instance)
 print ("Status Code: ",r.status_code)
 print ("Response Data: ",r.text)

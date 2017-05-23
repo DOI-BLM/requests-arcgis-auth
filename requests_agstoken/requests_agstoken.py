@@ -25,7 +25,8 @@ import warnings
 
 
 """ TODOS
-    Try to securely pass it (with post in the body)
+    Try to securely pass it (with post in the body).  Esri does not seem to support that on the admin interface.  For now, just add to the URI parameters
+    if username/pwd is wrong... dont keep re-requesting it... accounts get locked easily (3 failed login attempts)?
 """
 
 """ NOTES
@@ -48,10 +49,11 @@ class ArcGISServerTokenAuth(AuthBase):
         self._auth_info=None
         self._expires=datetime.fromtimestamp(int(time.time())-120)          # Set to 2 min ago
         self._last_request=None
+        self._redirect=None
 
     def __call__(self,r):
         # type(r) = PreparedRequest
-        print ("!!! CALLED ArcGISServerTokenAuth !!!")
+        #print ("!!! CALLED ArcGISServerTokenAuth !!!")
 
         # Only executte if after initialized (first request)
         if self.instance is None:
@@ -60,47 +62,65 @@ class ArcGISServerTokenAuth(AuthBase):
         if self._auth_info is None:
             self._get_server_security_posture(r)
 
-        # Possible FUTURE TODO -
-        #   What if the server is NOT token Auth??  For now, do not acquire a token and just return the prepared request...
+        # If the site does not support token authentication, then dont generate a token and just return the prepared request
         if not self._auth_info.get("isTokenBasedSecurity"):
             warnings.warn(("Unable to acquire token; site does not support token authentication"),TokenAuthenticationWarning)
             return r
 
-        if (self._expires - datetime.now()).total_seconds() < 0:
+        # Check token expiration and generate a new one if needed.  If it expires within 2 min from now (a little padding)
+        if (self._expires - datetime.now()).total_seconds() < 120:
             self._get_token(self._auth_info.get("tokenServicesUrl"))
 
-        # force all requests to POST??  To protect the token???
+        # Handle Re-Directs - See https://github.com/kennethreitz/requests/issues/4040
+        r.register_hook('response', self.handle_redirect)
 
-        ### ATTN !!! IT APPEARS THAT THE METHOD AND BODY WILL BE DROPPED ON A RE-DIRECT
-        r.method="POST"
-
-        # Add the token to the body (encoded)
-        ### ATTN !!!  Only able to get this to work by adding the token to the URL parameters... not in the body...
-        r.body=urlencode(self._token) if r.body is None else r.body+urlencode(self._token)
-        #r.params=self._token if r.params is None else r.params.update(self._token)
-        r.prepare_url(r.url,self._token)
-
-        r.headers.update(self._token)
+        self._add_token_to_request(r)
 
         # Return the prepared request
         return r
 
+    def handle_redirect(self, r, **kwargs):
+        # Handling Re-Direct!!!  This was necessary because the method (POST) was not persisting.
+        # type(r) = Response
+        # print "called handle_redirect"
+        if r.is_redirect:
+            # print "Re-Directed!"
+            self._redirect=r
+            req=r.request.copy()
+            req.url=r.headers.get("Location")
+            self._add_token_to_request(req)
+            self._redirect_resend=r.connection.send(req,**kwargs)
+            return self._redirect_resend
+        return r
+
+
+
+    def _add_token_to_request(self,r):
+        # Force the request to POST.  Possible implicatons here (like if a request only supports GET)
+        r.method="POST"
+
+        ### ATTN !!!  Only able to get this to work by adding the token to the URL parameters... not in the body...
+        # GOAL was to Add the token to the body (encoded), although when the method is POST and the token is present in the body... the server returns:
+        #   {"status":"error","messages":["Unauthorized access. Token not found. You can generate a token using the 'generateToken' operation."],"code":499}
+        #r.body=urlencode(self._token) if r.body is None else r.body+urlencode(self._token)
+
+        # For now... Add the token as a URL Query parameter
+        r.prepare_url(r.url,self._token)
+
+        return r
+
     def _get_token(self,token_url):
         # Submit user credentials to acquire security token
-        print ("!!! GETTING TOKEN !!!")
+        #print ("!!! GETTING TOKEN !!!")
         params={}
         params['f']='json'
         params['username']=self.username
         params['password']=self.password
         params['client']="requestip"            # Possible Future TODO - Allow developer to specify a specific IP.  Also... possibly allow developer to specify requested expiration...
 
-        print "Token URL: "+token_url
-        #print "params: "+str(urlencode(params))
         self._last_request=requests.post(token_url,data=urlencode(params),verify=self.verify,headers={"Content-type": "application/x-www-form-urlencoded","Accept": "text/plain"})
-        print self._last_request.text
 
         # Possible future TODO -  Handle bad requests (invalid uname/pwd, etc)
-        #   Just ignore the 'expires' key for now... no need for it yet, but could be stored for future use..  On future calls, maybe check the time agains the expires?  then req-acquire?  tabled for now...
         self._token['token']=self._last_request.json().get("token")
         self._expires=datetime.fromtimestamp(self._last_request.json().get("expires")/1000)
 
@@ -123,7 +143,10 @@ class ArcGISServerTokenAuth(AuthBase):
 
         # Query the server 'Info' to determine security posture
         server_info_url=self._get_url_string(r,"/rest/info")
-        self._last_request=requests.post(server_info_url,params={"f":"json"},verify=self.verify)
+
+        # Add f=json to parameters if not included in the URL string
+        params={"f":"json"} if server_info_url.find("f=json") is -1 else {}
+        self._last_request=requests.post(server_info_url,params=params,verify=self.verify)
         if self._last_request.status_code != 200:
             raise TokenAuthenticationError("Unable to acquire token; cannot determine site information at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
 
