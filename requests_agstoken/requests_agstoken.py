@@ -1,5 +1,7 @@
 
 import os
+from datetime import datetime
+import time
 
 # Ideally pull 'requests' from root install location.  If not it has been bundled with the package (bad practice!)
 # Maybe follow behind requests... put this in a 'packages' folder and note that these are not for modification??  https://github.com/kennethreitz/requests/tree/master/requests/packages
@@ -11,8 +13,8 @@ from urllib import urlencode
 from urlparse import urlparse
 from urlparse import parse_qs
 
-#import logging
-#logging.getLogger("requests").setLevel(logging.WARNING)
+from .exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+import warnings
 
 # Need to determine the "instance", then security posture (info) endpoint.
 # Expected Inputs:
@@ -23,37 +25,52 @@ from urlparse import parse_qs
 
 
 """ TODOS
-    Currently the token will get generated on every request, re-use it!!
-    Setup mechanism to re-generate token
     Try to securely pass it (with post in the body)
 """
+
+""" NOTES
+
+    will generate a token using the token URL from the FIRST REQUEST only at this point.
+        Meaning the token object will not be able to be re-used between management interfaces (seperate ArcGIS for Server Sites)
+
+"""
+
 class ArcGISServerTokenAuth(AuthBase):
     # Esri ArcGIS for Server Authentication Handler to be used with the Requests Package
-    # Need to handle expired tokens (for long running processes like windows services)
 
     def __init__(self,username,password,verify=True,instance=None):
         self.username=username
         self.password=password
-        self.instance=instance
+        self.instance=instance                                              # The 'instance' is also the 'web-adaptor' name.  Defaults to 'arcgis'.  Will be derived from the first URL request if not supplied.
         self.verify=verify
 
         self._token={}
+        self._auth_info=None
+        self._expires=datetime.fromtimestamp(int(time.time())-120)          # Set to 2 min ago
         self._last_request=None
 
     def __call__(self,r):
         # type(r) = PreparedRequest
         print ("!!! CALLED ArcGISServerTokenAuth !!!")
 
-        self._derive_instance(r)
-        auth_info=self._get_server_security_posture(r)
+        # Only executte if after initialized (first request)
+        if self.instance is None:
+            self._derive_instance(r)
 
-        # Possible FUTURE TODO - What if the server is NOT token Auth??  For now, do not acquire a token and just return the prepared request...
-        if not auth_info.get("isTokenBasedSecurity"):
+        if self._auth_info is None:
+            self._get_server_security_posture(r)
+
+        # Possible FUTURE TODO -
+        #   What if the server is NOT token Auth??  For now, do not acquire a token and just return the prepared request...
+        if not self._auth_info.get("isTokenBasedSecurity"):
+            warnings.warn(("Unable to acquire token; site does not support token authentication"),TokenAuthenticationWarning)
             return r
 
-        self._get_token(auth_info.get("tokenServicesUrl"))
+        if (self._expires - datetime.now()).total_seconds() < 0:
+            self._get_token(self._auth_info.get("tokenServicesUrl"))
 
         # force all requests to POST??  To protect the token???
+
         ### ATTN !!! IT APPEARS THAT THE METHOD AND BODY WILL BE DROPPED ON A RE-DIRECT
         r.method="POST"
 
@@ -70,6 +87,7 @@ class ArcGISServerTokenAuth(AuthBase):
 
     def _get_token(self,token_url):
         # Submit user credentials to acquire security token
+        print ("!!! GETTING TOKEN !!!")
         params={}
         params['f']='json'
         params['username']=self.username
@@ -84,6 +102,7 @@ class ArcGISServerTokenAuth(AuthBase):
         # Possible future TODO -  Handle bad requests (invalid uname/pwd, etc)
         #   Just ignore the 'expires' key for now... no need for it yet, but could be stored for future use..  On future calls, maybe check the time agains the expires?  then req-acquire?  tabled for now...
         self._token['token']=self._last_request.json().get("token")
+        self._expires=datetime.fromtimestamp(self._last_request.json().get("expires")/1000)
 
     def _get_url_string(self,r,path):
 
@@ -105,6 +124,10 @@ class ArcGISServerTokenAuth(AuthBase):
         # Query the server 'Info' to determine security posture
         server_info_url=self._get_url_string(r,"/rest/info")
         self._last_request=requests.post(server_info_url,params={"f":"json"},verify=self.verify)
+        if self._last_request.status_code != 200:
+            raise TokenAuthenticationError("Unable to acquire token; cannot determine site information at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
 
-        # Possible future TODO: Check response before sending back to avoid key error exception??
-        return self._last_request.json().get('authInfo')
+        if not self._last_request.json().has_key('authInfo'):
+            raise TokenAuthenticationError("Unable to acquire token; authInfo JSON Key unavailable at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
+
+        self._auth_info = self._last_request.json().get('authInfo')
