@@ -13,6 +13,9 @@ from urllib import urlencode
 from urlparse import urlparse
 from urlparse import parse_qs
 
+from .exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+import warnings
+
 # Need to determine the "instance", then security posture (info) endpoint.
 # Expected Inputs:
 #   https://host/arcgis
@@ -22,8 +25,6 @@ from urlparse import parse_qs
 
 
 """ TODOS
-    Currently the token will get generated on every request, re-use it!!
-    Setup mechanism to re-generate token
     Try to securely pass it (with post in the body)
 """
 
@@ -36,12 +37,11 @@ from urlparse import parse_qs
 
 class ArcGISServerTokenAuth(AuthBase):
     # Esri ArcGIS for Server Authentication Handler to be used with the Requests Package
-    # Need to handle expired tokens (for long running processes like windows services)
 
     def __init__(self,username,password,verify=True,instance=None):
         self.username=username
         self.password=password
-        self.instance=instance
+        self.instance=instance                                              # The 'instance' is also the 'web-adaptor' name.  Defaults to 'arcgis'.  Will be derived from the first URL request if not supplied.
         self.verify=verify
 
         self._token={}
@@ -63,6 +63,7 @@ class ArcGISServerTokenAuth(AuthBase):
         # Possible FUTURE TODO -
         #   What if the server is NOT token Auth??  For now, do not acquire a token and just return the prepared request...
         if not self._auth_info.get("isTokenBasedSecurity"):
+            warnings.warn(("Unable to acquire token; site does not support token authentication"),TokenAuthenticationWarning)
             return r
 
         if (self._expires - datetime.now()).total_seconds() < 0:
@@ -123,6 +124,10 @@ class ArcGISServerTokenAuth(AuthBase):
         # Query the server 'Info' to determine security posture
         server_info_url=self._get_url_string(r,"/rest/info")
         self._last_request=requests.post(server_info_url,params={"f":"json"},verify=self.verify)
+        if self._last_request.status_code != 200:
+            raise TokenAuthenticationError("Unable to acquire token; cannot determine site information at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
 
-        # Possible future TODO: Check response before sending back to avoid key error exception??
+        if not self._last_request.json().has_key('authInfo'):
+            raise TokenAuthenticationError("Unable to acquire token; authInfo JSON Key unavailable at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
+
         self._auth_info = self._last_request.json().get('authInfo')
