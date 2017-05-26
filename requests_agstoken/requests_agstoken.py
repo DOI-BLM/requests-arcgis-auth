@@ -13,8 +13,16 @@ from urllib import urlencode
 from urlparse import urlparse
 from urlparse import parse_qs
 
-from .exceptions import TokenAuthenticationError, TokenAuthenticationWarning
 import warnings
+try:
+    from .agsexceptions import TokenAuthenticationError, TokenAuthenticationWarning
+except:
+    import sys
+    from os import path
+    sys.path.append( path.dirname( path.dirname( path.abspath(__file__) ) ) )
+    from agsexceptions import TokenAuthenticationError, TokenAuthenticationWarning
+
+
 
 # Need to determine the "instance", then security posture (info) endpoint.
 # Expected Inputs:
@@ -36,6 +44,11 @@ import warnings
 
 """
 
+from requests_kerberos import HTTPKerberosAuth
+
+
+
+
 class ArcGISServerTokenAuth(AuthBase):
     # Esri ArcGIS for Server Authentication Handler to be used with the Requests Package
 
@@ -55,12 +68,7 @@ class ArcGISServerTokenAuth(AuthBase):
         # type(r) = PreparedRequest
         #print ("!!! CALLED ArcGISServerTokenAuth !!!")
 
-        # Only executte if after initialized (first request)
-        if self.instance is None:
-            self._derive_instance(r)
-
-        if self._auth_info is None:
-            self._get_server_security_posture(r)
+        self._init(r)
 
         # If the site does not support token authentication, then dont generate a token and just return the prepared request
         if not self._auth_info.get("isTokenBasedSecurity"):
@@ -79,10 +87,20 @@ class ArcGISServerTokenAuth(AuthBase):
         # Return the prepared request
         return r
 
+    def _init(self,r):
+        # Only executte if after initialized (first request)
+        print "init"
+        if self.instance is None:
+            self._derive_instance(r)
+        # Derive Auth Information
+        if self._auth_info is None:
+            self._get_server_security_posture(r)
+
+
     def handle_redirect(self, r, **kwargs):
         # Handling Re-Direct!!!  This was necessary because the method (POST) was not persisting.
         # type(r) = Response
-        # print "called handle_redirect"
+        print "called handle_redirect"
         if r.is_redirect:
             # print "Re-Directed!"
             self._redirect=r
@@ -121,6 +139,9 @@ class ArcGISServerTokenAuth(AuthBase):
         self._last_request=requests.post(token_url,data=urlencode(params),verify=self.verify,headers={"Content-type": "application/x-www-form-urlencoded","Accept": "text/plain"})
 
         # Possible future TODO -  Handle bad requests (invalid uname/pwd, etc)
+        if self._last_request.json().get("error") is not None:
+            err=self._last_request.json().get("error")
+            raise TokenAuthenticationError("Unable to acquire token; {json}".format(json=str(err)))
         self._token['token']=self._last_request.json().get("token")
         self._expires=datetime.fromtimestamp(self._last_request.json().get("expires")/1000)
 
@@ -154,3 +175,33 @@ class ArcGISServerTokenAuth(AuthBase):
             raise TokenAuthenticationError("Unable to acquire token; authInfo JSON Key unavailable at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
 
         self._auth_info = self._last_request.json().get('authInfo')
+
+class ArcGISServerAuth(ArcGISServerTokenAuth,HTTPKerberosAuth):
+    # Will determine security posture and will setup either web-tier or token security.
+
+    def __init__(self,username=None,password=None,verify=True,instance=None):
+        super(ArcGISServerAuth, self).__init__(username,password,verify,instance)
+        self._instanceof=None
+
+    def __call__(self,r):
+        try:
+            ArcGISServerAuth._init(self,r)
+            if self._auth_info.get("isTokenBasedSecurity"):
+                self._instanceof=ArcGISServerTokenAuth
+        except TokenAuthenticationError:
+            HTTPKerberosAuth.__init__(self)
+            self._instanceof=HTTPKerberosAuth
+
+        #raise TokenAuthenticationError("Unable to Authenticate {url} with either token or Kerberos".format(url=r.url))
+
+        # If the site does not support token authentication, then dont generate a token and just return the prepared request
+        return self._instanceof.__call__(self,r)
+
+
+s=requests.Session()
+#import getpass
+#username=r'blm\pfoppe'
+#pwd=getpass.getpass()
+#s.auth=ArcGISServerAuth(username,pwd,verify=False)
+s.auth=ArcGISServerAuth(verify=False)
+r=s.get(r'https://gis.blm.doi.net/arcgisauthpub/admin?f=json',verify=False)
