@@ -236,6 +236,7 @@ class ArcGISPortalTokenAuth(AuthBase):
         return up.geturl().replace(up.path,"/%s%s"%(self.instance,"/sharing/rest/generateToken"))
 
     def _get_token(self,token_url):
+        print "getting Token"
         # Submit user credentials to acquire security token
         params={}
         params['f']='json'

@@ -8,17 +8,11 @@ import warnings
 warnings.filterwarnings("ignore")
 print "ATTN!!! Warnings are being filtered !!!"
 
-# Had to do this to run interactivly from PyScripter
-try:
-    from ..arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
-except:
-    import sys
-    from os import path
-    sys.path.append( path.dirname( path.dirname( path.abspath(__file__) ) ) )
-    from arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
+if __name__ == '__main__' and __package__ is None:
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
+from arcgis_auth import ArcGISPortalAuth, ArcGISServerAuth
 
-
-# Adjust terminal colors (pass/fail)
 try:
     from colorama import init
     init(autoreset=True)
@@ -27,7 +21,7 @@ except:
     from colorama import init
     init(autoreset=True)
 
-from colorama import Fore
+from colorama import Fore,Back
 
 def print_color(color,*objs):
     # color = foreground colors from colorama.Fore.  EX: Fore.GREEN
@@ -44,8 +38,8 @@ def print_red(*objs):
 def print_yellow(*objs):
     print_color(Fore.YELLOW,*objs)
 
-def print_blue(*objs):
-    print_color(Fore.BLUE,*objs)
+def print_cyan(*objs):
+    print_color(Fore.CYAN,*objs)
 
 
 TOOL_INFO = """
@@ -60,39 +54,44 @@ Usage:
 """
 
 SAMPLE_CONFIG_FILE = """
-=============================
-SAMPLE CONFIG FILE
-=============================
+    [General Settings]
+    verify_certs = False
 
-[General Settings]
+    # URL's with different security postures.  Passwords will be prompted (except for 'duplicate' usernames, the previous password promt will be re-used)
+    [ArcGIS Server Token Auth]
+    url = https://gis.dev.blm.doi.net/arcgispub/admin/?f=json
+    expected_output = {"resources":["machines","clusters","system","services","security","data","uploads","logs","mode","usagereports"],"currentVersion":10.41,"fullVersion":"10.4.1","acceptLanguage":null}
+    auth_handler = ArcGISServerTokenAuth
+    username = blm\pfoppe
 
-# Verbose Logging?  True/False
-verbose = True
+    [ArcGIS Server Kerberos Auth]
+    url = https://gis.dev.blm.doi.net/arcgisauthpub/admin/?f=json
+    expected_output={"resources":["machines","clusters","system","services","security","data","uploads","logs","mode","usagereports"],"currentVersion":10.41,"fullVersion":"10.4.1","acceptLanguage":null}
+    auth_handler = ArcGISServerAuth
 
-# URL's with different security postures.  Ensure to add f=json parameter to parse...
-[ArcGIS Server Token Auth]
-url = https://gis.dev.blm.doi.net/arcgispub/admin/?f=json
-username = blm\pfoppe
+    [ArcGIS Server NTLM Auth]
+    url = https://gis.blm.doi.net/arcgisauthpub/admin/?f=json
+    username = blm\pfoppe
+    expected_output={"resources":["machines","clusters","system","services","security","data","uploads","logs","mode","usagereports"],"currentVersion":10.41,"fullVersion":"10.4.1","acceptLanguage":null}
+    auth_handler = ArcGISServerAuth
 
-[ArcGIS Server Kerberos Auth]
-url = https://gis.dev.blm.doi.net/arcgisauthpub/admin/?f=json
-username =
+    [Portal Token Auth]
+    url = https://blm-egis.maps.arcgis.com/sharing/rest?f=json
+    username = pfoppe_BLM
+    expected_output = {"currentVersion":"5.1"}
+    auth_handler = ArcGISPortalTokenAuth
 
-[ArcGIS Server NTLM Auth]
-url = https://gis.blm.doi.net/arcgisauthpub/admin/?f=json
-username = blm\pfoppe
+    [Portal Kerberos Auth]
+    url = https://ilmocop3ap60.blm.doi.net/portal/sharing/rest?f=json
+    expected_output = {"currentVersion":"3.10"}
+    auth_handler = ArcGISPortalAuth
 
-[Portal Token Auth]
-url = https://blm-egis.maps.arcgis.com/sharing/rest?f=json
-username = pfoppe_BLM
-
-[Portal Kerberos Auth]
-url = https://ilmocop3ap60.blm.doi.net/portal/sharing/rest?f=json
-username =
-
-[Portal NTLM Auth]
-url = https://egisportal.blm.doi.net/portal/sharing/rest?f=json
-username = blm\pfoppe"""
+    [Portal NTLM Auth]
+    url = https://egisportal.blm.doi.net/portal/sharing/rest?f=json
+    username = blm\pfoppe
+    expected_output = {"currentVersion":"3.10"}
+    auth_handler = ArcGISPortalAuth
+\n\n\n"""
 
 
 def get_inputs():
@@ -118,15 +117,11 @@ def get_configs(cfg_file):
     config.read(cfg_file)
     return config
 
-"""def test_ags_token(url,username,pwd,verify):
-    s=requests.session()
-    s.auth=ArcGISServerTokenAuth(username,pwd,verify=verify)
-"""
-
 def get_password(username):
     return getpass("Enter password for %s:"%username)
 
 def get_credentials(config):
+    print ("Obtaining ALL User Credentials...")
     credentials={}
     for s in config.sections():
         if config.has_option(s,"username"):
@@ -137,23 +132,98 @@ def get_credentials(config):
                 credentials.update({username:get_password(username)})
     return credentials
 
+def process_sections(config,credentials,verify):
+
+    for s in config.sections():
+
+        # Skip the "General Settings" section
+        if s == "General Settings":
+            continue
+
+        # Get Configs
+        print ("--------------------------------------\nGETTING CONFIGS TO TEST '%s'"%s)
+        try:
+            url=config.get(s,"url")
+            expected_output=config.get(s,"expected_output")
+            auth_handler=config.get(s,"auth_handler")
+        except:
+            print(Back.RED + "ERROR - Failed to acquire configs for %s.  Not executing Test"%s)
+            continue
+        username=config.get(s,"username") if config.has_option(s,"username") else ""
+
+        # Setup Auth Handler
+        # print ("Setting Auth Handler...")
+        auth = None
+        if auth_handler == "ArcGISServerTokenAuth":
+            if username == "":
+                print_red ("ERROR - %s requires credentials.  Not executing Test"%auth_handler)
+                continue
+            auth=ArcGISServerTokenAuth(username,credentials[username],verify=verify)
+        elif auth_handler == "ArcGISPortalTokenAuth":
+            if username == "":
+                print_red ("ERROR - %s requires credentials.  Not executing Test"%auth_handler)
+                continue
+            auth=ArcGISPortalTokenAuth(username,credentials[username],verify=verify)
+        elif auth_handler == "ArcGISServerAuth":
+            if username == "":
+                auth=ArcGISServerAuth(verify=verify)
+            else:
+                auth=ArcGISServerAuth(username,credentials[username],verify=verify)
+        elif auth_handler == "ArcGISPortalAuth":
+            if username == "":
+                auth=ArcGISPortalAuth(verify=verify)
+            else:
+                auth=ArcGISPortalAuth(username,credentials[username],verify=verify)
+
+        #Make Requests
+        print ("Executing test...")
+        result=test_auth(auth,url,verify,expected_output)
+        if result:
+            print (Back.GREEN + "%s tests passed"%s)
+        else:
+            print (Back.RED + "%s tests failed"%s)
+
 def test_auth(auth,url,verify,expected_output):
+
     # auth = authenticaiton handler (session().auth = auth)
     # url = (str)
     # verify = (Bool) Verify the SSL certificates?
     # Expected Output = (STR)
+
+    output=True
     s = requests.Session()
     s.auth=auth
     r=s.get(url,verify=verify)
+
+    # Check Status Code
     if r.status_code == 200:
         print_green("Status Code: ",r.status_code)
     else:
         print_red("Status Code: ",r.status_code)
+        output=False
 
+    # Check Expected Output
     if r.text == expected_output:
         print_green('Expected Output Matches!')
     else:
-        print_red("Expected Output Does Not Match!  Output:\n%s"%r.text.decode("UTF-8"))
+        print_red("Expected Output Does Not Match!  Output:\n%s"%r.text.encode("UTF-8"))
+        output=False
+
+    # Check for existance of token
+    if type(auth) == ArcGISPortalTokenAuth or type(auth) == ArcGISServerTokenAuth:
+        if auth._token.get("token") is not None:
+            print_green("Token is present!  %s..."%auth._token.get("token")[0:10])
+        else:
+            print_red("Token is NOT PRESENT!  %s"%str(auth._token))
+            output=False
+    elif auth._instanceof == ArcGISPortalTokenAuth or auth._instanceof == ArcGISServerTokenAuth:
+        if auth._token.get("token") is not None:
+            print_green("Token is present!  %s..."%auth._token.get("token")[0:10])
+        else:
+            print_red("Token is NOT PRESENT!  %s"%str(auth._token))
+            output=False
+
+    return output
 
 
 def main():
@@ -166,20 +236,24 @@ def main():
     credentials=get_credentials(config)
     verify=config.getboolean("General Settings","verify_certs")
 
-    print_blue("==== STARTING TESTS ====")
+    print_cyan("==== STARTING TESTS ====")
+    process_sections(config,credentials,verify)
 
     # Start Tests
-    section="ArcGIS Server Token Auth"
+    """section="ArcGIS Server Token Auth"
     url=config.get(section,"url")
     username=config.get(section,"username")
     expected_output=config.get(section,"expected_output")
-    test_auth(ArcGISServerTokenAuth(username,credentials[username]),url,verify,expected_output)
+    auth=ArcGISServerTokenAuth(username,credentials[username],verify=verify)
+    test_auth(auth,url,verify,expected_output)
 
     section = "Portal Token Auth"
     url=config.get(section,"url")
     username=config.get(section,"username")
     expected_output=config.get(section,"expected_output")
-    test_auth(ArcGISPortalTokenAuth(username,credentials[username]),url,verify,expected_output)
+    auth=ArcGISPortalTokenAuth(username,credentials[username],verify=verify)
+    test_auth(auth,url,verify,expected_output)
+    """
 
 
 if __name__ == '__main__':

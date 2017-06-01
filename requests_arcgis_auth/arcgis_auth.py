@@ -1,4 +1,4 @@
-
+print
 import os
 from datetime import datetime
 import time
@@ -16,18 +16,18 @@ from requests_ntlm import HttpNtlmAuth
 from urllib import urlencode
 from urlparse import urlparse
 
-from .arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
-
+from arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
+from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
 
 # Added this to be able to execute from PyScripter (which kept throwing errors about not being in a 'package').
-try:
-    from .agpexceptions import TokenAuthenticationError, TokenAuthenticationWarning
+"""try:
+    from .arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
 except:
     import sys
     from os import path
     sys.path.append( path.dirname( path.dirname( path.abspath(__file__) ) ) )
-    from agpexceptions import TokenAuthenticationError, TokenAuthenticationWarning
-
+    from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+"""
 
 """ TODOS
     Try to securely pass it (with post in the body).  Esri does not seem to support that on the admin interface.  For now, just add to the URI parameters
@@ -168,14 +168,14 @@ class ArcGISPortalAuth(ArcGISPortalTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
 ### !!! LEFT OFF HERE!!!  Need to determine server security type, then use right instance of...
         self._last_request=requests.head(self._get_token_url(r),verify=self.verify)
         if self._last_request.status_code==200:
-            try:
-                ArcGISPortalTokenAuth._init(self,r)
-                self._instanceof=ArcGISPortalTokenAuth
-                self._auth_info={"isTokenBasedSecurity": True}
-                return True
-            except TokenAuthenticationError:
-                # catch & throw away exception and try other handlers.
-                pass
+            #try:
+            ArcGISPortalTokenAuth._init(self,r)
+            self._instanceof=ArcGISPortalTokenAuth
+            self._auth_info={"isTokenBasedSecurity": True}
+            return True
+            #except TokenAuthenticationError:
+            #    # catch & throw away exception and try other handlers.
+            #    pass
 
         # If token auth fails, check for "Web-Tier" security
         lr = self._last_request
