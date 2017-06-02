@@ -156,6 +156,7 @@ class ArcGISPortalAuth(ArcGISPortalTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
 
     def _init(self,r):
         # Only execute if after initialized (first request)
+        ArcGISPortalTokenAuth._init(self,r)
 
         # Derive Auth Information
         if self._auth_info is None:
