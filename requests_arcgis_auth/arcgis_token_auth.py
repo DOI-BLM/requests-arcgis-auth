@@ -4,7 +4,6 @@ from datetime import datetime
 import time
 import warnings
 
-
 # Ideally pull 'requests' from root install location.  If not we could potentially bundle with the package (bad practice!)
     # Maybe follow behind requests... put this in a 'packages' folder and note that these are not for modification??  https://github.com/kennethreitz/requests/tree/master/requests/packages
 
@@ -181,12 +180,6 @@ class ArcGISPortalTokenAuth(AuthBase):
 
         self._init(r)
 
-        # If the site does not support token authentication, then dont generate a token and just return the prepared request
-        """if not self._auth_info.get("isTokenBasedSecurity"):
-            warnings.warn(("Unable to acquire token; site does not support token authentication"),TokenAuthenticationWarning)
-            return r
-        """
-
         # Check token expiration and generate a new one if needed.  If it expires within 2 min from now (a little padding)
         if (self._expires - datetime.now()).total_seconds() < 120:
             self._get_token(self._get_token_url(r))
@@ -202,9 +195,6 @@ class ArcGISPortalTokenAuth(AuthBase):
 
         if self.instance is None:
             self._derive_instance(r)
-
-        #if self._auth_info is None:
-        #    self._get_server_security_posture(r)
 
     def handle_redirect(self, r, **kwargs):
         # Handling Re-Direct!!!  This was necessary because the method (POST) was not persisting on an HTTP 302 re-direct.  See https://github.com/kennethreitz/requests/issues/4040
@@ -253,14 +243,7 @@ class ArcGISPortalTokenAuth(AuthBase):
         self._token['token']=self._last_request.json().get("token")
         self._expires=datetime.fromtimestamp(self._last_request.json().get("expires")/1000)
 
-    """def _get_url_string(self,r,path):
 
-        # Add the path above to the 'instance'.  The Path should can include a preceding '/' (or not)
-        #   !!! WARNING !!! Possible that we receive an array index  exception if the path is an empty string...  Possibly add future checks??
-        path=path[1:] if path[0] is "/" else path
-        up=urlparse(r.url)
-        return up.geturl().replace(up.path,"/%s/%s"%(self.instance,path))
-    """
     def _derive_instance(self,r):
 
         # Need to determine the "instance" from the requesting URL, then security posture (info) endpoint.
@@ -275,22 +258,5 @@ class ArcGISPortalTokenAuth(AuthBase):
             up=urlparse(r.url)
             path1=up.path.split("/")[1]
             self.instance = path1 if path1 != "sharing" else ""
-
-    """def _get_server_security_posture(self,r,auth=None):
-
-        # Query the server 'Info' to determine security posture
-        server_info_url=self._get_url_string(r,"/rest/info")
-
-        # Add f=json to parameters if not included in the URL string
-        params={"f":"json"} if server_info_url.find("f=json") is -1 else {}
-        self._last_request=requests.post(server_info_url,params=params,verify=self.verify,auth=auth)
-        if self._last_request.status_code != 200:
-            raise TokenAuthenticationError("Unable to acquire token; cannot determine site information at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
-
-        if not self._last_request.json().has_key('authInfo'):
-            raise TokenAuthenticationError("Unable to acquire token; authInfo JSON Key unavailable at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
-
-        self._auth_info = self._last_request.json().get('authInfo')
-    """
 
 

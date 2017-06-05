@@ -118,23 +118,6 @@ class ArcGISServerAuth(ArcGISServerTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
             path1=up.path.split("/")[1]
             self.instance = path1 if path1 != "sharing" else ""
 
-    """def _get_server_security_posture(self,r,auth=None):
-
-        # Query the server 'Info' to determine security posture
-        server_info_url=self._get_url_string(r,"/rest/info")
-
-        # Add f=json to parameters if not included in the URL string
-        params={"f":"json"} if server_info_url.find("f=json") is -1 else {}
-        self._last_request=requests.post(server_info_url,params=params,verify=self.verify,auth=auth)
-        if self._last_request.status_code != 200:
-            raise TokenAuthenticationError("Unable to acquire token; cannot determine site information at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
-
-        if not self._last_request.json().has_key('authInfo'):
-            raise TokenAuthenticationError("Unable to acquire token; authInfo JSON Key unavailable at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
-
-        self._auth_info = self._last_request.json().get('authInfo')
-    """
-
 class ArcGISPortalAuth(ArcGISPortalTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
     # Will determine security posture and will setup either web-tier or token security.
 
@@ -166,17 +149,12 @@ class ArcGISPortalAuth(ArcGISPortalTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
         # Determine the Authenticaiton Handler to use (token, kerberos, NTLM)
 
         # First try the Token Authentication
-### !!! LEFT OFF HERE!!!  Need to determine server security type, then use right instance of...
         self._last_request=requests.head(self._get_token_url(r),verify=self.verify)
         if self._last_request.status_code==200:
-            #try:
             ArcGISPortalTokenAuth._init(self,r)
             self._instanceof=ArcGISPortalTokenAuth
             self._auth_info={"isTokenBasedSecurity": True}
             return True
-            #except TokenAuthenticationError:
-            #    # catch & throw away exception and try other handlers.
-            #    pass
 
         # If token auth fails, check for "Web-Tier" security
         lr = self._last_request
