@@ -1,4 +1,4 @@
-# Esri ArcGIS Authentication for Requests
+# Esri ArcGIS Authentication for Python Requests
 
 **Authentication handler for using Esri ArcGIS for Server and Portal (ArcGIS Online) Authentication with Python Requests**
 
