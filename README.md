@@ -1,4 +1,4 @@
-# ArcGISServerTokenAuth
+# Esri ArcGIS Authentication for Requests
 
 **Authentication handler for using Esri ArcGIS for Server and Portal (ArcGIS Online) Authentication with Python Requests**
 
