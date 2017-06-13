@@ -12,6 +12,7 @@ if __name__ == '__main__' and __package__ is None:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
 from arcgis_auth import ArcGISPortalAuth, ArcGISServerAuth
+from arcgis_saml_auth import ArcGISPortalSAMLAuth
 
 try:
     from colorama import init
@@ -174,6 +175,9 @@ def process_sections(config,credentials,verify):
                 auth=ArcGISPortalAuth(verify=verify)
             else:
                 auth=ArcGISPortalAuth(username,credentials[username],verify=verify)
+        elif auth_handler == "ArcGISPortalSAMLAuth":
+            client_id=config.get(s,"client_id")
+            auth = ArcGISPortalSAMLAuth(client_id)
 
         #Make Requests
         print ("Executing test...")
@@ -210,7 +214,11 @@ def test_auth(auth,url,verify,expected_output):
         output=False
 
     # Check for existance of token
-    if type(auth) == ArcGISPortalTokenAuth or type(auth) == ArcGISServerTokenAuth:
+    if type(auth) == ArcGISPortalSAMLAuth:
+        if auth._token_data is not None:
+            print_green("Access Token is present! %s..."%auth._token_data.get("access_token")[0:10])
+            print_green("Refresh Token is present! %s..."%auth._token_data.get("refresh_token")[0:10])
+    elif type(auth) == ArcGISPortalTokenAuth or type(auth) == ArcGISServerTokenAuth:
         if auth._token.get("token") is not None:
             print_green("Token is present!  %s..."%auth._token.get("token")[0:10])
         else:
