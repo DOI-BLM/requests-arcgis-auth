@@ -10,6 +10,9 @@ This module provides python requests authentication handlers for the Esri ArcGIS
 * 'Web-tier' authentication using Kerberos or NTLM (Microsoft Integrated Windows Authentication)
 * Portal for ArcGIS Enterprise Logins (OAuth2 with SAML)
 
+More information and examples can be found on the WIKI Pages - https://github.com/DOI-BLM/requests-arcgis-auth/wiki
+
+## Basic Usage Examples:
 
 ArcGIS for Server "Token Authentication" Usage (Non-Session Based): 
 ```python
@@ -37,4 +40,4 @@ s.auth = auth
 s.get("https://org.maps.arcgis.com/sharing/rest/portals/self?f=json")
 ```
 
-More information and examples can be found on the WIKI Pages - https://github.com/DOI-BLM/requests-arcgis-auth/wiki
+
