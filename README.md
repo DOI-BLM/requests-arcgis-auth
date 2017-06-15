@@ -34,7 +34,10 @@ ArcGIS Online and Portal for ArcGIS "Enterprise Logins via SAML" Authentication 
 ```python
 import requests
 from requests_arcgis_auth import ArcGISPortalSAMLAuth
+
+client_id = "123456789"                 # This client_id is that of a registered 'application' in the portal.  
 auth = ArcGISPortalSAMLAuth(client_id)
+
 s = requests.session()
 s.auth = auth
 s.get("https://org.maps.arcgis.com/sharing/rest/portals/self?f=json")
