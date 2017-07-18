@@ -25,12 +25,14 @@ class ArcGISPortalSAMLAuth(AuthBase):
         client_id,
         capture_request_history = False,
         saml_auth = HTTPKerberosAuth(mutual_authentication = OPTIONAL),
-        expiration = 120):
+        expiration = 120,
+        verify = True):
 
         self.client_id = client_id
         self.capture_request_history = capture_request_history
         self.history=[]
         self.expiration = expiration    # Defaults to 2 hours (120 min)
+        self.verify = verify
         self.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
 
         # DOI SAML service required these headers for single-sign-on.  Developers can explicity over-write if needed...
@@ -40,6 +42,7 @@ class ArcGISPortalSAMLAuth(AuthBase):
         self.saml_auth = saml_auth
 
         ### Derived Fields ###
+        self._verify_cert = True
         self._base_url = None       # Expected to be - https://host/<instance>/sharing/rest     where <instance> is optional
         self._oauth_info = None     # Derived from the portal "authorize" endpoint
         self._saml_code = None      # Derived from the SAML login
@@ -51,6 +54,7 @@ class ArcGISPortalSAMLAuth(AuthBase):
         # Initialze on the first call ...
         if (self._base_url is None):
             self._init(prepared_request.url)
+
 
         # Handle Expired Token
         prepared_request.register_hook('response', self._handle_response)
@@ -117,7 +121,7 @@ class ArcGISPortalSAMLAuth(AuthBase):
             'response_type': 'code',
             'expiration': self.expiration,
             'redirect_uri': self.redirect_uri}
-        response = requests.get(portal_auth_url,params=params)
+        response = requests.get(portal_auth_url, params=params, verify = self.verify)
         if self.capture_request_history:
             self.history.append(response)
         if response.status_code != 200:
@@ -149,7 +153,7 @@ class ArcGISPortalSAMLAuth(AuthBase):
             raise TokenAuthenticationError("{err}; unable to determine IDP Authorization URL from {json}".format(err=ERROR_STRING,json=self._oauth_info))
 
         payload = {'oauth_state':self._oauth_info.get('oauth_state')}
-        response = requests.post(idp_url, data = payload, auth = self.saml_auth, headers = self.saml_headers, allow_redirects = True)
+        response = requests.post(idp_url, data = payload, auth = self.saml_auth, headers = self.saml_headers, allow_redirects = True, verify = self.verify)
         if self.capture_request_history:
             self.history.append(response)
         if response.status_code != 200:
@@ -165,7 +169,7 @@ class ArcGISPortalSAMLAuth(AuthBase):
             inputElements = form.find_all('input', { 'name' : True })
             post_data = dict([(el['name'], el['value']) for el in inputElements])
             # Submit the form and hopefully get our code value
-            response = requests.post(url, data = post_data, allow_redirects = True, auth=self.saml_auth)
+            response = requests.post(url, data = post_data, allow_redirects = True, auth=self.saml_auth, verify = self.verify)
             if self.capture_request_history:
                 self.history.append(response)
             if response.status_code != 200:
@@ -199,7 +203,7 @@ class ArcGISPortalSAMLAuth(AuthBase):
         portal_token_url = self._base_url + "/oauth2/token"
         payload = params
 
-        response = requests.post(portal_token_url, data = payload)
+        response = requests.post(portal_token_url, data = payload, verify = self.verify)
         self._token_acquired = datetime.now()
         if self.capture_request_history:
             self.history.append(response)
