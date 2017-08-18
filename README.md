@@ -4,7 +4,12 @@
 
 ----------
 
-This module provides python requests authentication handlers for the Esri ArcGIS Server and Portal products. This supports the current deployment models:
+This module provides python requests authentication handlers for the Esri ArcGIS Server and Portal products. The purpose is to authenticate a user to obtain authorized access to protected data and functions in the Esri REST API.  There are endless use cases to automate business or IT administrative workflows... here are a few examples: 
+1) Automate user management (creating/removing users or modifying users roles/permissions)  
+2) Automate service publishing
+3) Completing geospatial data analysis (for protected services)
+
+This module supports the current deployment models:
 
 * Proprietary Esri ArcGIS for Server and Portal Token Authentication.
 * 'Web-tier' authentication using Kerberos or NTLM (Microsoft Integrated Windows Authentication)
