@@ -9,8 +9,17 @@ import warnings
 
 import requests
 from requests.auth import AuthBase
-from urllib import urlencode
-from urlparse import urlparse
+try:
+    from urllib import urlencode
+except:
+    def urlencode(input_dict):
+        return ('&'.join(['{}={}'.format(quote(k, safe='/'), quote(v, safe='/'))
+          for k, v in input_dict.items()]))
+
+try:
+    from urlparse import urlparse
+except:
+    from urllib.parse import urlparse
 
 
 # Added this to be able to execute from PyScripter (which kept throwing errors about not being in a 'package').
@@ -153,7 +162,7 @@ class ArcGISServerTokenAuth(AuthBase):
         if self._last_request.status_code != 200:
             raise TokenAuthenticationError("Unable to acquire token; cannot determine site information at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
 
-        if not self._last_request.json().has_key('authInfo'):
+        if not 'authInfo' in self._last_request.json():
             raise TokenAuthenticationError("Unable to acquire token; authInfo JSON Key unavailable at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
 
         self._auth_info = self._last_request.json().get('authInfo')
@@ -226,7 +235,7 @@ class ArcGISPortalTokenAuth(AuthBase):
         return up.geturl().replace(up.path,"/%s%s"%(self.instance,"/sharing/rest/generateToken"))
 
     def _get_token(self,token_url):
-        print "getting Token"
+        # print "getting Token"
         # Submit user credentials to acquire security token
         params={}
         params['f']='json'

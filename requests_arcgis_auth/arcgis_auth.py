@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 import time
 import warnings
-from exceptions import ValueError
+#from exceptions import ValueError
 
 # Ideally pull 'requests' from root install location.  If not we could potentially bundle with the package (bad practice!)
     # Maybe follow behind requests... put this in a 'packages' folder and note that these are not for modification??  https://github.com/kennethreitz/requests/tree/master/requests/packages
@@ -15,8 +15,16 @@ from requests_ntlm import HttpNtlmAuth
 from bs4 import BeautifulSoup                               # required - pip install --trusted-host pypi.python.org beautifulsoup4
 import re
 
-from urllib import urlencode
-from urlparse import urlparse
+try:
+    from urllib import urlencode
+except:
+    def urlencode(input_dict):
+        return ('&'.join(['{}={}'.format(quote(k, safe='/'), quote(v, safe='/'))
+          for k, v in input_dict.items()]))
+try:
+    from urlparse import urlparse
+except:
+    from urllib.parse import urlparse
 import json
 
 from arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth

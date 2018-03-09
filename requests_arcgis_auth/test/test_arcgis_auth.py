@@ -6,7 +6,7 @@ from getpass import getpass
 
 import warnings
 warnings.filterwarnings("ignore")
-print "ATTN!!! Warnings are being filtered !!!"
+print ("ATTN!!! Warnings are being filtered !!!")
 
 if __name__ == '__main__' and __package__ is None:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
