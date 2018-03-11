@@ -45,6 +45,16 @@ class ArcGISServerTokenAuth(AuthBase):
     # Esri ArcGIS for Server Authentication Handler to be used with the Requests Package
 
     def __init__(self,username,password,verify=True,instance=None):
+        """Python Requests Authentication Handler for the Esri ArcGIS Server product (Stand Alone).  This class only supports the vendor proprietary ?Token Based? authentication.
+        .. note::
+            This class will be used with the python requests API
+
+        Args:
+            username (str): Username of user authenticating.  Only required for token authentication or NTLM
+            password (:obj:`str`, optional): Optional - password of user authenticating.  Only required for token authentication or NTLM
+            verify (bool): Optional - Verify SSL Certificates (default: True)
+            instance (str): Optional - The 'instance' name of the ArcGIS for Server Site (also known as the web-adaptor name).  Code will attempt to derive if not supplied.  ex: 'arcgis'
+        """
 
         self.username=username
         self.password=password
