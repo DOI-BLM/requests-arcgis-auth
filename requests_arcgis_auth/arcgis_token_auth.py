@@ -9,8 +9,17 @@ import warnings
 
 import requests
 from requests.auth import AuthBase
-from urllib import urlencode
-from urlparse import urlparse
+try:
+    from urllib import urlencode
+except:
+    def urlencode(input_dict):
+        return ('&'.join(['{}={}'.format(quote(k, safe='/'), quote(v, safe='/'))
+          for k, v in input_dict.items()]))
+
+try:
+    from urlparse import urlparse
+except:
+    from urllib.parse import urlparse
 
 
 # Added this to be able to execute from PyScripter (which kept throwing errors about not being in a 'package').
@@ -34,14 +43,23 @@ except:
 
 class ArcGISServerTokenAuth(AuthBase):
     # Esri ArcGIS for Server Authentication Handler to be used with the Requests Package
+    """Python Requests Authentication Handler for the Esri ArcGIS Server product (Stand Alone).  This class only supports the vendor proprietary 'Token Based'TokenAuthenticationError authentication.
 
+    Args:
+        username (:obj:`str`): Username of user authenticating.
+        password (:obj:`str`): Password of user authenticating.
+        verify (:obj:`bool`, Optional): Verify SSL Certificates (default: True).  Use caution disabiling this (not reccomended for production use)
+        instance (:obj:`str`, Optional): - The 'instance' name of the ArcGIS for Server Site (also known as the web-adaptor name).  Code will attempt to derive if not supplied.  ex: 'arcgis'
+    """
     def __init__(self,username,password,verify=True,instance=None):
 
+        # Public attributes
         self.username=username
         self.password=password
         self.instance=instance                                              # The 'instance' is also the 'web-adaptor' name.  Defaults to 'arcgis'.  Will be derived from the first URL request if not supplied.
         self.verify=verify
 
+        # 'Private' Attributes
         self._token={}
         self._auth_info=None
         self._expires=datetime.fromtimestamp(int(time.time())-120)          # Set to 2 min ago
@@ -49,6 +67,7 @@ class ArcGISServerTokenAuth(AuthBase):
         self._redirect=None                                                 # Only used for debugging... possibly remove?
 
     def __call__(self,r):
+
         # type(r) = PreparedRequest
 
         self._init(r)
@@ -69,6 +88,7 @@ class ArcGISServerTokenAuth(AuthBase):
         return r
 
     def _init(self,r):
+
         # Only execute if after initialized (first request) - Derive Instance (if needed) & Authentication Info
 
         if self.instance is None:
@@ -79,8 +99,10 @@ class ArcGISServerTokenAuth(AuthBase):
 
 
     def handle_redirect(self, r, **kwargs):
+
         # Handling Re-Direct!!!  This was necessary because the method (POST) was not persisting on an HTTP 302 re-direct.  See https://github.com/kennethreitz/requests/issues/4040
         # type(r) = Response
+
         if r.is_redirect:
             self._redirect=r
             req=r.request.copy()
@@ -91,6 +113,7 @@ class ArcGISServerTokenAuth(AuthBase):
         return r
 
     def _add_token_to_request(self,r):
+
         # Force the request to POST.  Possible future implicatons here (like if a request only supports GET)
         r.method="POST"
 
@@ -104,7 +127,9 @@ class ArcGISServerTokenAuth(AuthBase):
         return r
 
     def _get_token(self,token_url):
+
         # Submit user credentials to acquire security token
+
         params={}
         params['f']='json'
         params['username']=self.username
@@ -153,7 +178,7 @@ class ArcGISServerTokenAuth(AuthBase):
         if self._last_request.status_code != 200:
             raise TokenAuthenticationError("Unable to acquire token; cannot determine site information at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
 
-        if not self._last_request.json().has_key('authInfo'):
+        if not 'authInfo' in self._last_request.json():
             raise TokenAuthenticationError("Unable to acquire token; authInfo JSON Key unavailable at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
 
         self._auth_info = self._last_request.json().get('authInfo')
@@ -162,20 +187,31 @@ class ArcGISServerTokenAuth(AuthBase):
 class ArcGISPortalTokenAuth(AuthBase):
     # Esri ArcGIS Portal (and ArcGIS Online) Authentication Handler to be used with the Requests Package
 
+    """Python Requests Authentication Handler for the Esri Portal for ArcGIS product and ArcGIS Online.  This class only supports the vendor proprietary 'Token Based' authentication.
+
+    Args:
+        username (:obj:`str`): Username of user authenticating.
+        password (:obj:`str`): Password of user authenticating.
+        verify (:obj:`bool`, Optional): Verify SSL Certificates (default: True).  Use caution disabiling this (not reccomended for production use)
+        instance (:obj:`str`, Optional): - The 'instance' name of the ArcGIS for Server Site (also known as the web-adaptor name).  Code will attempt to derive if not supplied.  ex: 'portal'
+    """
+
     def __init__(self,username,password,verify=True,instance=None):
 
+        # Public Attributes
         self.username=username
         self.password=password
         self.instance=instance                                              # The 'instance' is also the 'web-adaptor' name.  Defaults to 'arcgis'.  Will be derived from the first URL request if not supplied.
         self.verify=verify
 
+        # 'Private' Attributes
         self._token={}
-        ##??self._auth_info=None
         self._expires=datetime.fromtimestamp(int(time.time())-120)          # Set to 2 min ago
         self._last_request=None
         self._redirect=None                                                 # Only used for debugging... possibly remove?
 
     def __call__(self,r):
+
         # type(r) = PreparedRequest
 
         self._init(r)
@@ -191,12 +227,14 @@ class ArcGISPortalTokenAuth(AuthBase):
         return r
 
     def _init(self,r):
+
         # Only execute if after initialized (first request) - Derive Instance (if needed) & Authentication Info
 
         if self.instance is None:
             self._derive_instance(r)
 
     def handle_redirect(self, r, **kwargs):
+
         # Handling Re-Direct!!!  This was necessary because the method (POST) was not persisting on an HTTP 302 re-direct.  See https://github.com/kennethreitz/requests/issues/4040
         # type(r) = Response
         if r.is_redirect:
@@ -209,6 +247,7 @@ class ArcGISPortalTokenAuth(AuthBase):
         return r
 
     def _add_token_to_request(self,r):
+
         # Force the request to POST.  Possible future implicatons here (like if a request only supports GET)
         r.method="POST"
 
@@ -226,7 +265,7 @@ class ArcGISPortalTokenAuth(AuthBase):
         return up.geturl().replace(up.path,"/%s%s"%(self.instance,"/sharing/rest/generateToken"))
 
     def _get_token(self,token_url):
-        print "getting Token"
+        # print "getting Token"
         # Submit user credentials to acquire security token
         params={}
         params['f']='json'
