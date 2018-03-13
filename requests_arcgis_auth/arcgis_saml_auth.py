@@ -1,5 +1,9 @@
 
-
+"""
+.. module:: arcgis_saml_auth
+    :platform: Windows
+    :synopsis: Used for Authentication to a portal with SAML authentication (enterprise logins)
+"""
 from datetime import datetime
 from exceptions import ValueError
 
@@ -20,6 +24,21 @@ class ArcGISPortalSAMLAuth(AuthBase):
     # Esri ArcGIS Online (AGOL) and Portal for ArcGIS Authentication Handler to be used with the Python Requests Package
     # Specifically designed to work with portals that are federated to a SAML Based identity provider with 'enterprise logins'.
     # This will execute the OAuth2 "User login via Application" workflow (Authorization Code Grant) as documented at - http://resources.arcgis.com/en/help/arcgis-rest-api/index.html#//02r30000009z000000
+
+    """Auth Handler for the Esri Portal for ArcGIS product and ArcGIS Online (AGOL) configured with enterprise logins (SAML).
+    This auth handler supports a SAML service that has Kerberos authentication enabled.  A custom SAML auth handler can be provided with the 'saml_auth' parameter (example: for forms based login).
+
+    Args:
+        client_id (:obj:`str`): A 'client ID' of a registered application in the portal.
+        capture_requests_history (:obj:`bool`, Optional): Specifices if request history should be captured in the 'history' attribute (default: False).
+        saml_auth (:obj:`<Requests_Auth_Handler>`, Optional): An authentication handler for the SAML identity provider.  Defaults to the `HTTPKerberosAuth` handler.  Allows a developer to write their own handler to tie into the SAML handler if the SAML service supports a different authentication scheme.
+        expiration (:obj:`int`, Optional): Specifies the desired expiration of the portal authentication token.  Defaults to 120 (minutes)
+        verify (:obj:`bool`, Optional): Verify SSL Certificates (default: True).  Use caution disabiling this (not reccomended for production use)
+
+    Attributes:
+        redirect_uri (:obj:`str`): The redirect URI of the registered application (defaults to 'urn:ietf:wg:oauth:2.0:oob').  Leave this alone unless the redirect URI has been custom configured on the registered application
+        saml_headers (:obj:'dict`): A dictionary of headers for the SAML service.
+    """
 
     def __init__(self,
         client_id,

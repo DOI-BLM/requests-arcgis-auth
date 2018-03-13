@@ -1,3 +1,8 @@
+"""
+.. module:: arcgis_auth
+    :platform: Windows
+    :synopsis: Used for Authentication to an Esri ArcGIS Server or Portal
+"""
 
 import os
 from datetime import datetime
@@ -41,34 +46,32 @@ except:
     from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
 """
 
-""" TODOS
-    Try to securely pass it (with post in the body).  Esri does not seem to support that on the admin interface.  For now, just add to the URI parameters
-    if username/pwd is wrong... dont keep re-requesting it... accounts get locked easily (3 failed login attempts)?
+"""
+TODOS
+Try to securely pass it (with post in the body).  Esri does not seem to support that on the admin interface.  For now, just add to the URI parameters
+if username/pwd is wrong... dont keep re-requesting it... accounts get locked easily (3 failed login attempts)?
 """
 
 """ NOTES
-    will generate a token using the token URL from the FIRST REQUEST only at this point.
-        Meaning the token object will not be able to be re-used between management interfaces (seperate ArcGIS for Server Sites)
+will generate a token using the token URL from the FIRST REQUEST only at this point
+Meaning the token object will not be able to be re-used between management interfaces (seperate ArcGIS for Server Sites)
 """
 
 
 class ArcGISServerAuth(ArcGISServerTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
-    # Will determine security posture and will setup either web-tier or token security.
 
-    """Python Requests Authentication Handler for the Esri ArcGIS Server product (Stand Alone).  This class supports the vendor proprietary ?Token Based? authentication and web-tier security using Kerberos or NTLM.
-    .. note::
-        This class will be used with the python requests API
+    """Esri ArcGIS for Server (Stand Alone) authentication handler for the python requests API.
+    supports the vendor proprietary 'Token Based' authentication and web-tier security using Kerberos or NTLM.
+
+    Args:
+        username (:obj:`str`, Optional): username of user authenticating.  Only required for token authentication or NTLM
+        password (:obj:`str`, Optional): password of user authenticating.  Only required for token authentication or NTLM
+        verify (:obj:`bool`, Optional): Verify SSL Certificates (default: True).  Use caution disabiling this (not reccomended for production use)
+        instance (:obj:`str`, Optional): The 'instance' name of the ArcGIS for Server Site (also known as the web-adaptor name).  This will be derived if not supplied.  ex: 'arcgis'
     """
 
     def __init__(self,username=None,password=None,verify=True,instance=None):
-        """Init description - PF to fill in
 
-        Args:
-            username (str): Optional - username of user authenticating.  Only required for token authentication or NTLM
-            password (str): Optional - password of user authenticating.  Only required for token authentication or NTLM
-            verify (bool): Optional - Verify SSL Certificates (default: True)
-            instance (str): Optional - The 'instance' name of the ArcGIS for Server Site (also known as the web-adaptor name).  This will be derived if not supplied.  ex: 'arcgis'
-        """
         super(ArcGISServerAuth, self).__init__(username,password,verify,instance)
         self._instanceof=None
 
@@ -147,6 +150,16 @@ class ArcGISServerAuth(ArcGISServerTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
 
 class ArcGISPortalAuth(ArcGISPortalTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
     # Will determine security posture and will setup either web-tier or token security.
+
+    """Python Requests Authentication Handler for the Esri Portal for ArcGIS product and ArcGIS Online.
+    supports the vendor proprietary 'Token Based' authentication and web-tier security using Kerberos or NTLM.
+
+    Args:
+        username (:obj:`str`): Username of user authenticating.
+        password (:obj:`str`): Password of user authenticating.
+        verify (:obj:`bool`, Optional): Verify SSL Certificates (default: True).  Use caution disabiling this (not reccomended for production use)
+        instance (:obj:`str`, Optional): - The 'instance' name of the ArcGIS for Server Site (also known as the web-adaptor name).  Code will attempt to derive if not supplied.  ex: 'portal'
+    """
 
     def __init__(self,username=None,password=None,verify=True,instance=None):
         super(ArcGISPortalAuth, self).__init__(username,password,verify,instance)

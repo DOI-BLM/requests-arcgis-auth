@@ -1,0 +1,372 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>requests_arcgis_auth.arcgis_saml_auth &#8212; requests_arcgis_auth 1.0 documentation</title>
+    <link rel="stylesheet" href="../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" src="../../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">requests_arcgis_auth 1.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for requests_arcgis_auth.arcgis_saml_auth</h1><div class="highlight"><pre>
+<span></span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">.. module:: arcgis_saml_auth</span>
+<span class="sd">    :platform: Windows</span>
+<span class="sd">    :synopsis: Used for Authentication to a portal with SAML authentication (enterprise logins)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="k">import</span> <span class="n">datetime</span>
+<span class="kn">from</span> <span class="nn">exceptions</span> <span class="k">import</span> <span class="ne">ValueError</span>
+
+<span class="kn">import</span> <span class="nn">requests</span>
+<span class="kn">from</span> <span class="nn">requests.auth</span> <span class="k">import</span> <span class="n">AuthBase</span>
+<span class="kn">from</span> <span class="nn">requests_kerberos</span> <span class="k">import</span> <span class="n">HTTPKerberosAuth</span><span class="p">,</span> <span class="n">OPTIONAL</span>
+<span class="kn">from</span> <span class="nn">requests_ntlm</span> <span class="k">import</span> <span class="n">HttpNtlmAuth</span>
+<span class="kn">from</span> <span class="nn">bs4</span> <span class="k">import</span> <span class="n">BeautifulSoup</span>                               <span class="c1"># required - pip install --trusted-host pypi.python.org beautifulsoup4</span>
+<span class="kn">import</span> <span class="nn">re</span>
+
+<span class="kn">from</span> <span class="nn">urlparse</span> <span class="k">import</span> <span class="n">urlparse</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="kn">from</span> <span class="nn">arcgis_exceptions</span> <span class="k">import</span> <span class="n">TokenAuthenticationError</span><span class="p">,</span> <span class="n">TokenAuthenticationWarning</span>
+
+
+<div class="viewcode-block" id="ArcGISPortalSAMLAuth"><a class="viewcode-back" href="../../index.html#requests_arcgis_auth.ArcGISPortalSAMLAuth">[docs]</a><span class="k">class</span> <span class="nc">ArcGISPortalSAMLAuth</span><span class="p">(</span><span class="n">AuthBase</span><span class="p">):</span>
+    <span class="c1"># Esri ArcGIS Online (AGOL) and Portal for ArcGIS Authentication Handler to be used with the Python Requests Package</span>
+    <span class="c1"># Specifically designed to work with portals that are federated to a SAML Based identity provider with &#39;enterprise logins&#39;.</span>
+    <span class="c1"># This will execute the OAuth2 &quot;User login via Application&quot; workflow (Authorization Code Grant) as documented at - http://resources.arcgis.com/en/help/arcgis-rest-api/index.html#//02r30000009z000000</span>
+
+    <span class="sd">&quot;&quot;&quot;Auth Handler for the Esri Portal for ArcGIS product and ArcGIS Online (AGOL) configured with enterprise logins (SAML).</span>
+<span class="sd">    This auth handler supports a SAML service that has Kerberos authentication enabled.  A custom SAML auth handler can be provided with the &#39;saml_auth&#39; parameter (example: for forms based login).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        client_id (:obj:`str`): A &#39;client ID&#39; of a registered application in the portal.</span>
+<span class="sd">        capture_requests_history (:obj:`bool`, Optional): Specifices if request history should be captured in the &#39;history&#39; attribute (default: False).</span>
+<span class="sd">        saml_auth (:obj:`&lt;Requests_Auth_Handler&gt;`, Optional): An authentication handler for the SAML identity provider.  Defaults to the `HTTPKerberosAuth` handler.  Allows a developer to write their own handler to tie into the SAML handler if the SAML service supports a different authentication scheme.</span>
+<span class="sd">        expiration (:obj:`int`, Optional): Specifies the desired expiration of the portal authentication token.  Defaults to 120 (minutes)</span>
+<span class="sd">        verify (:obj:`bool`, Optional): Verify SSL Certificates (default: True).  Use caution disabiling this (not reccomended for production use)</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        redirect_uri (:obj:`str`): The redirect URI of the registered application (defaults to &#39;urn:ietf:wg:oauth:2.0:oob&#39;).  Leave this alone unless the redirect URI has been custom configured on the registered application</span>
+<span class="sd">        saml_headers (:obj:&#39;dict`): A dictionary of headers for the SAML service.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="p">,</span>
+        <span class="n">capture_request_history</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">saml_auth</span> <span class="o">=</span> <span class="n">HTTPKerberosAuth</span><span class="p">(</span><span class="n">mutual_authentication</span> <span class="o">=</span> <span class="n">OPTIONAL</span><span class="p">),</span>
+        <span class="n">expiration</span> <span class="o">=</span> <span class="mi">120</span><span class="p">,</span>
+        <span class="n">verify</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span> <span class="o">=</span> <span class="n">client_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">capture_request_history</span> <span class="o">=</span> <span class="n">capture_request_history</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">=</span><span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expiration</span> <span class="o">=</span> <span class="n">expiration</span>    <span class="c1"># Defaults to 2 hours (120 min)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verify</span> <span class="o">=</span> <span class="n">verify</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">redirect_uri</span> <span class="o">=</span> <span class="s1">&#39;urn:ietf:wg:oauth:2.0:oob&#39;</span>
+
+        <span class="c1"># DOI SAML service required these headers for single-sign-on.  Developers can explicity over-write if needed...</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">saml_headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;User-Agent&quot;</span><span class="p">:</span><span class="s2">&quot;Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.1; WOW64; Trident/7.0; SLCC2; .NET CLR 2.0.50727; .NET4.0C; .NET CLR 3.5.30729; .NET CLR 3.0.30729; .NET4.0E; InfoPath.3)&quot;</span><span class="p">}</span>
+
+        <span class="c1"># DOI SAML service did not support &#39;REQUIRED&#39; mutual authentication.  HTTPKerberosAuth threw a &#39;mutual authentication exception&#39;.  Developers can explicity over-write if needed (or even add NTLM or some other 3rd party auth handler to the SAML communications)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">saml_auth</span> <span class="o">=</span> <span class="n">saml_auth</span>
+
+        <span class="c1">### Derived Fields ###</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_verify_cert</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_base_url</span> <span class="o">=</span> <span class="kc">None</span>       <span class="c1"># Expected to be - https://host/&lt;instance&gt;/sharing/rest     where &lt;instance&gt; is optional</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_oauth_info</span> <span class="o">=</span> <span class="kc">None</span>     <span class="c1"># Derived from the portal &quot;authorize&quot; endpoint</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_saml_code</span> <span class="o">=</span> <span class="kc">None</span>      <span class="c1"># Derived from the SAML login</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_token_data</span> <span class="o">=</span> <span class="kc">None</span>     <span class="c1"># Derived from the portal &quot;token&quot; endpoint</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_token_acquired</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prepared_request</span><span class="p">):</span>
+
+        <span class="c1"># Initialze on the first call ...</span>
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_base_url</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">prepared_request</span><span class="o">.</span><span class="n">url</span><span class="p">)</span>
+
+
+        <span class="c1"># Handle Expired Token</span>
+        <span class="n">prepared_request</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="s1">&#39;response&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">)</span>
+
+
+        <span class="c1"># Check token expiration and re-acquire if needed</span>
+        <span class="c1"># TODO - What happens when the refresh token is expired???</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_acquired</span>
+        <span class="k">if</span> <span class="n">delta</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span><span class="o">/</span><span class="mi">60</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;expires_in&quot;</span><span class="p">):</span>
+            <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;client_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span>
+                <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;refresh_token&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">)}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_get_access_token</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_token_to_request</span><span class="p">(</span><span class="n">prepared_request</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">):</span>
+
+        <span class="c1"># Initialze the authentication handler (first request only)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_base_url</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_derive_base_url</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_get_portal_authorization_info</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_authenticate_with_saml</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_get_portal_tokens</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_derive_base_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">url</span><span class="p">):</span>
+        <span class="c1"># Need to support the following example URL&#39;s:</span>
+            <span class="c1"># https://ORG.maps.arcgis.com/</span>
+            <span class="c1"># https://ORG.maps.arcgis.com</span>
+            <span class="c1"># https://ORG.maps.arcgis.com/sharing/rest</span>
+            <span class="c1"># https://ORG.maps.arcgis.com/sharing/rest/</span>
+            <span class="c1"># https://ORG.maps.arcgis.com/sharing/rest/portals/self</span>
+            <span class="c1"># https://ORG.maps.arcgis.com/instance</span>
+            <span class="c1"># https://ORG.maps.arcgis.com/instance/</span>
+            <span class="c1"># https://ORG.maps.arcgis.com/instance/sharing/rest</span>
+            <span class="c1"># https://ORG.maps.arcgis.com/instance/sharing/rest/</span>
+            <span class="c1"># https://ORG.maps.arcgis.com/instance/sharing/rest/portals/self</span>
+            <span class="c1"># https://fqdn/instance</span>
+            <span class="c1"># https://fqdn/instance/</span>
+            <span class="c1"># https://fqdn/instance/sharing/rest</span>
+            <span class="c1"># https://fqdn/instance/sharing/rest/</span>
+            <span class="c1"># https://fqdn/instance/sharing/rest/portals/self</span>
+        <span class="n">up</span> <span class="o">=</span> <span class="n">urlparse</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+        <span class="n">path_splt</span> <span class="o">=</span> <span class="n">up</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="n">path_splt</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">path_splt</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="s2">&quot;sharing&quot;</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="s2">&quot;/</span><span class="si">{0}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">instance</span><span class="p">)</span> <span class="k">if</span> <span class="n">instance</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">!=</span> <span class="s2">&quot;sharing&quot;</span> <span class="ow">and</span> <span class="n">instance</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">final_up</span> <span class="o">=</span> <span class="n">up</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">{0}</span><span class="s2">/sharing/rest&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">instance</span><span class="p">),</span> <span class="n">query</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_base_url</span> <span class="o">=</span> <span class="n">final_up</span><span class="o">.</span><span class="n">geturl</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_get_portal_authorization_info</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="c1"># Obtain the Identity Provider URL (idpAuthorizeUrl) and OAUTH State (oauth_state)</span>
+        <span class="c1"># http://resources.arcgis.com/en/help/arcgis-rest-api/index.html#/Authorize/02r300000214000000/</span>
+
+        <span class="n">ERROR_STRING</span> <span class="o">=</span> <span class="s2">&quot;Unable to obtain portal authorization information&quot;</span>
+
+        <span class="c1"># Execute request to portal &#39;authorize&#39; end-point</span>
+        <span class="n">portal_auth_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_base_url</span> <span class="o">+</span> <span class="s2">&quot;/oauth2/authorize&quot;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;client_id&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span>
+            <span class="s1">&#39;response_type&#39;</span><span class="p">:</span> <span class="s1">&#39;code&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;expiration&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">expiration</span><span class="p">,</span>
+            <span class="s1">&#39;redirect_uri&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">redirect_uri</span><span class="p">}</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">portal_auth_url</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="n">verify</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">verify</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">capture_request_history</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">TokenAuthenticationError</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{err}</span><span class="s2">; HTTP Status Code </span><span class="si">{sc}</span><span class="s2"> from </span><span class="si">{url}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">err</span><span class="o">=</span><span class="n">ERROR_STRING</span><span class="p">,</span><span class="n">sc</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span><span class="n">url</span><span class="o">=</span><span class="n">portal_auth_url</span><span class="p">))</span>
+
+        <span class="c1"># Parse the response and obtain authentication information</span>
+        <span class="n">pattern</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s1">&#39;var oAuthInfo = ({.*?});&#39;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
+        <span class="n">soup</span> <span class="o">=</span> <span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="s1">&#39;html.parser&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">script</span> <span class="ow">in</span> <span class="n">soup</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;script&#39;</span><span class="p">):</span>
+            <span class="n">script_code</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">script</span><span class="o">.</span><span class="n">string</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">if</span> <span class="n">script</span><span class="o">.</span><span class="n">string</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+            <span class="n">matches</span> <span class="o">=</span> <span class="n">pattern</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">script_code</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">matches</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">js_object</span> <span class="o">=</span> <span class="n">matches</span><span class="o">.</span><span class="n">groups</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_oauth_info</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">js_object</span><span class="p">)</span>
+                <span class="k">break</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_oauth_info</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_oauth_info</span> <span class="o">==</span> <span class="p">{}:</span>
+            <span class="k">raise</span> <span class="n">TokenAuthenticationError</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{err}</span><span class="s2">; unable to parse response to obtain oAuthInfo&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">err</span><span class="o">=</span><span class="n">ERROR_STRING</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">_authenticate_with_saml</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="c1"># Authenticate with the SAML service &amp; obtain SAML code</span>
+
+        <span class="n">ERROR_STRING</span> <span class="o">=</span> <span class="sa">r</span><span class="s1">&#39;Unable to authenticate with SAML Service&#39;</span>
+
+        <span class="c1"># Execute request to SAML service</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">idp_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_oauth_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;federationInfo&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;idpAuthorizeUrl&quot;</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">TokenAuthenticationError</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{err}</span><span class="s2">; unable to determine IDP Authorization URL from </span><span class="si">{json}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">err</span><span class="o">=</span><span class="n">ERROR_STRING</span><span class="p">,</span><span class="n">json</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_oauth_info</span><span class="p">))</span>
+
+        <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;oauth_state&#39;</span><span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">_oauth_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;oauth_state&#39;</span><span class="p">)}</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">idp_url</span><span class="p">,</span> <span class="n">data</span> <span class="o">=</span> <span class="n">payload</span><span class="p">,</span> <span class="n">auth</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">saml_auth</span><span class="p">,</span> <span class="n">headers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">saml_headers</span><span class="p">,</span> <span class="n">allow_redirects</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">verify</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">verify</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">capture_request_history</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">TokenAuthenticationError</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{err}</span><span class="s2">; HTTP Status Code </span><span class="si">{sc}</span><span class="s2"> from </span><span class="si">{url}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">err</span><span class="o">=</span><span class="n">ERROR_STRING</span><span class="p">,</span><span class="n">sc</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span><span class="n">url</span><span class="o">=</span><span class="n">idp_url</span><span class="p">))</span>
+
+        <span class="c1"># Parse the response and obtain the SAML CODE</span>
+        <span class="n">soup</span> <span class="o">=</span> <span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="s1">&#39;html.parser&#39;</span><span class="p">)</span>
+        <span class="n">url</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">form</span> <span class="ow">in</span> <span class="n">soup</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;form&#39;</span><span class="p">,</span> <span class="p">{</span> <span class="s1">&#39;name&#39;</span> <span class="p">:</span> <span class="s1">&#39;hiddenform&#39;</span> <span class="p">}):</span>
+            <span class="c1"># Get the URL to POST</span>
+            <span class="n">url</span> <span class="o">=</span> <span class="n">form</span><span class="p">[</span><span class="s1">&#39;action&#39;</span><span class="p">]</span>
+            <span class="c1"># Get all of the named input fields</span>
+            <span class="n">inputElements</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;input&#39;</span><span class="p">,</span> <span class="p">{</span> <span class="s1">&#39;name&#39;</span> <span class="p">:</span> <span class="kc">True</span> <span class="p">})</span>
+            <span class="n">post_data</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">([(</span><span class="n">el</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">],</span> <span class="n">el</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">])</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">inputElements</span><span class="p">])</span>
+            <span class="c1"># Submit the form and hopefully get our code value</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">data</span> <span class="o">=</span> <span class="n">post_data</span><span class="p">,</span> <span class="n">allow_redirects</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">saml_auth</span><span class="p">,</span> <span class="n">verify</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">verify</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">capture_request_history</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">TokenAuthenticationError</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{err}</span><span class="s2">; HTTP Status Code </span><span class="si">{sc}</span><span class="s2"> from </span><span class="si">{url}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">err</span><span class="o">=</span><span class="n">ERROR_STRING</span><span class="p">,</span><span class="n">sc</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span><span class="n">url</span><span class="o">=</span><span class="n">idp_url</span><span class="p">))</span>
+            <span class="n">token_content</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">text</span>
+            <span class="k">break</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">soup</span> <span class="o">=</span> <span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">token_content</span><span class="p">,</span> <span class="s1">&#39;html.parser&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_saml_code</span> <span class="o">=</span> <span class="n">soup</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s1">&#39;code&#39;</span><span class="p">)[</span><span class="s1">&#39;value&#39;</span><span class="p">]</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">TokenAuthenticationError</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{err}</span><span class="s2">; Unable to acquire SAML code from </span><span class="si">{url}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">err</span><span class="o">=</span><span class="n">ERROR_STRING</span><span class="p">,</span><span class="n">url</span><span class="o">=</span><span class="n">idp_url</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">_get_portal_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="c1"># provide SAML code to portal and acquire portal access_token and refresh_token</span>
+
+        <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;client_id&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span>
+            <span class="s1">&#39;code&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_saml_code</span><span class="p">,</span>
+            <span class="s1">&#39;redirect_uri&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">redirect_uri</span><span class="p">,</span>
+            <span class="s1">&#39;grant_type&#39;</span><span class="p">:</span> <span class="s1">&#39;authorization_code&#39;</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_get_access_token</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_get_access_token</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">params</span><span class="p">):</span>
+
+        <span class="c1"># Acquire access token</span>
+        <span class="c1"># http://resources.arcgis.com/en/help/arcgis-rest-api/index.html#/Token/02r300000213000000/</span>
+
+        <span class="n">ERROR_STRING</span> <span class="o">=</span> <span class="sa">r</span><span class="s1">&#39;Unable to obtain portal access_token&#39;</span>
+
+        <span class="n">portal_token_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_base_url</span> <span class="o">+</span> <span class="s2">&quot;/oauth2/token&quot;</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">params</span>
+
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">portal_token_url</span><span class="p">,</span> <span class="n">data</span> <span class="o">=</span> <span class="n">payload</span><span class="p">,</span> <span class="n">verify</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">verify</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_token_acquired</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">capture_request_history</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">TokenAuthenticationError</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{err}</span><span class="s2">; HTTP Status Code </span><span class="si">{sc}</span><span class="s2"> from </span><span class="si">{url}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">err</span><span class="o">=</span><span class="n">ERROR_STRING</span><span class="p">,</span><span class="n">sc</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span><span class="n">url</span><span class="o">=</span><span class="n">portal_token_url</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_token_data</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_handle_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">resp</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># type(r) = Response</span>
+        <span class="c1"># Check the response for an expired token... re-acquire if necessary</span>
+        <span class="c1">#       ex:     {u&#39;error&#39;: {u&#39;code&#39;: 498, u&#39;details&#39;: [], u&#39;message&#39;: u&#39;Invalid token.&#39;}}</span>
+
+        <span class="c1">### Handling Expired Tokens!!!</span>
+
+        <span class="c1"># Check for actual HTTP Status code 498 (when f=json is not supplied)</span>
+        <span class="k">if</span> <span class="n">resp</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">498</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_expired_token</span><span class="p">(</span><span class="n">resp</span><span class="p">,</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Check for JSON error (vendor spec)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">resp</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">err</span> <span class="o">=</span> <span class="n">resp</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">err</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;code&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">498</span> <span class="ow">and</span> <span class="n">err</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;message&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;Invalid token.&quot;</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_expired_token</span><span class="p">(</span><span class="n">resp</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Why do we get here?!?!?!?</span>
+                    <span class="c1">#    {u&#39;error&#39;: {u&#39;code&#39;: 403,</span>
+                    <span class="c1">#        u&#39;details&#39;: [],</span>
+                    <span class="c1">#        u&#39;message&#39;: u&#39;You do not have permissions to access this resource or perform this operation.&#39;,</span>
+                    <span class="c1">#        u&#39;messageCode&#39;: u&#39;GWM_0003&#39;}}</span>
+                    <span class="c1"># OTHERS?!?!?!?</span>
+                    <span class="c1"># raise TokenAuthenticationError(&quot;Failed to handle expired token...&quot;)</span>
+                    <span class="k">pass</span>
+        <span class="c1"># Unable to parse JSON data... requestor could ask for non-JSON formatted data...  Just throw away exception for now...</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="k">return</span> <span class="n">resp</span>
+
+    <span class="k">def</span> <span class="nf">_handle_expired_token</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">resp</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Handle an expired token by re-initializing the object</span>
+
+        <span class="n">req</span><span class="o">=</span><span class="n">resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">url</span><span class="p">)</span>
+        <span class="n">req</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_add_token_to_request</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">resp</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">req</span><span class="p">,</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">capture_request_history</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">def</span> <span class="nf">_add_token_to_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prepared_request</span><span class="p">):</span>
+
+        <span class="c1"># Add the token to the request</span>
+
+        <span class="c1"># Force the request to POST.  Possible future implicatons here (like if a request only supports GET)</span>
+        <span class="n">prepared_request</span><span class="o">.</span><span class="n">method</span><span class="o">=</span><span class="s2">&quot;POST&quot;</span>
+
+        <span class="c1"># Add the token to the request</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">TokenAuthenticationWarning</span><span class="p">(</span><span class="s2">&quot;Unable to add the access_token to the request;&quot;</span><span class="p">)</span>
+        <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;token&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">)}</span>
+
+        <span class="c1"># Remove the token form the request QUERY if it already exists...</span>
+        <span class="n">up</span> <span class="o">=</span> <span class="n">urlparse</span><span class="p">(</span><span class="n">prepared_request</span><span class="o">.</span><span class="n">url</span><span class="p">)</span>
+        <span class="n">orig_params</span> <span class="o">=</span> <span class="n">up</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;&amp;&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">orig_params</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">p</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>                 <span class="c1"># Handle empty Parameter List</span>
+                <span class="n">k</span><span class="p">,</span><span class="n">v</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">!=</span> <span class="s2">&quot;token&quot;</span><span class="p">:</span>
+                    <span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">k</span><span class="p">:</span><span class="n">v</span><span class="p">})</span>
+        <span class="n">up</span> <span class="o">=</span> <span class="n">up</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">prepared_request</span><span class="o">.</span><span class="n">prepare_url</span><span class="p">(</span><span class="n">up</span><span class="o">.</span><span class="n">geturl</span><span class="p">(),</span> <span class="n">params</span> <span class="o">=</span> <span class="n">params</span><span class="p">)</span>
+</div>
+        <span class="k">return</span> <span class="n">prepared_request</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">requests_arcgis_auth 1.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2018, USDOI BLM.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.7.1.
+    </div>
+  </body>
+</html>
