@@ -1,6 +1,6 @@
-# Esri ArcGIS Authentication for Python Requests
+# Esri ArcGIS Authentication Handlers for Python Requests API
 
-**Authentication handler for using Esri ArcGIS for Server and Portal (ArcGIS Online) Authentication with Python Requests**
+**Authenticate to Esri ArcGIS for Server, Portal and ArcGIS Online (AGOL) using Python Requests**
 
 ----------
 
@@ -9,13 +9,15 @@ This module provides python requests authentication handlers for the Esri ArcGIS
 2) Automate service publishing
 3) Completing geospatial data analysis (for protected services)
 
-This module supports the current deployment models:
+The authentication handlers support the following deployment models:
 
-* Proprietary Esri ArcGIS for Server and Portal Token Authentication.
-* 'Web-tier' authentication using Kerberos or NTLM (Microsoft Integrated Windows Authentication)
-* Portal for ArcGIS Enterprise Logins (OAuth2 with SAML)
+* Propritery ‘Token-Based’ Authentication
+* Web-Tier security using NTLM or Kerberos (Microsoft Integrated Windows Authentication)
+* SAML based ‘enterprise logins’ (OAuth2)\*
 
-More information and examples can be found on the WIKI Pages - https://github.com/DOI-BLM/requests-arcgis-auth/wiki
+*Only supports SAML services with Kerberos authentication (no forms based login)
+
+More information and examples can be found at - https://doi-blm.github.io/requests-arcgis-auth/
 
 ## Basic Usage Examples:
 
