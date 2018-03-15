@@ -5,7 +5,7 @@
     :synopsis: Used for Authentication to a portal with SAML authentication (enterprise logins)
 """
 from datetime import datetime
-from exceptions import ValueError
+#from exceptions import ValueError
 
 import requests
 from requests.auth import AuthBase
@@ -14,7 +14,11 @@ from requests_ntlm import HttpNtlmAuth
 from bs4 import BeautifulSoup                               # required - pip install --trusted-host pypi.python.org beautifulsoup4
 import re
 
-from urlparse import urlparse
+try:
+    from urlparse import urlparse
+except:
+    from urllib.parse import urlparse
+
 import json
 
 from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning

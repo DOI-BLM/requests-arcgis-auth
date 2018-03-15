@@ -1,6 +1,11 @@
 
 import sys,os
-import ConfigParser
+
+try:
+    import ConfigParser
+except:
+    import configparser as ConfigParser
+
 import requests
 from getpass import getpass
 

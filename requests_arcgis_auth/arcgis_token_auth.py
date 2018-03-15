@@ -12,9 +12,10 @@ from requests.auth import AuthBase
 try:
     from urllib import urlencode
 except:
+    from urllib.parse import quote
     def urlencode(input_dict):
         return ('&'.join(['{}={}'.format(quote(k, safe='/'), quote(v, safe='/'))
-          for k, v in input_dict.items()]))
+            for k, v in input_dict.items()]))
 
 try:
     from urlparse import urlparse
