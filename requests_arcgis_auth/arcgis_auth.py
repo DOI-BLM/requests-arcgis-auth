@@ -115,7 +115,7 @@ class ArcGISServerAuth(ArcGISServerTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
         # Try Kerberos
         if 'Negotiate' in auths:
             test_req = requests.head(r.url,auth=HTTPKerberosAuth(),verify=self.verify)
-            if test_req.status_code == 200:
+            if test_req.ok:
                 self._instanceof = HTTPKerberosAuth
                 self._auth_info={"isTokenBasedSecurity": False}
                 HTTPKerberosAuth.__init__(self)
@@ -124,7 +124,7 @@ class ArcGISServerAuth(ArcGISServerTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
         # Try NTLM
         if 'Negotiate' in auths or 'NTLM' in auths:
             test_req = requests.head(r.url,auth=HttpNtlmAuth(self.username,self.password),verify=self.verify)
-            if test_req.status_code == 200:
+            if test_req.ok:
                 self._instanceof = HttpNtlmAuth
                 self._auth_info={"isTokenBasedSecurity": False}
                 HttpNtlmAuth.__init__(self,self.username,self.password)
@@ -205,7 +205,7 @@ class ArcGISPortalAuth(ArcGISPortalTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
         # Try Kerberos
         if 'Negotiate' in auths:
             self._last_request = requests.head(r.url,auth=HTTPKerberosAuth(),verify=self.verify)
-            if self._last_request.status_code == 200:
+            if self._last_request.ok:
                 self._instanceof = HTTPKerberosAuth
                 self._auth_info={"isTokenBasedSecurity": False}
                 HTTPKerberosAuth.__init__(self)
@@ -214,7 +214,7 @@ class ArcGISPortalAuth(ArcGISPortalTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
         # Try NTLM
         if 'Negotiate' in auths or 'NTLM' in auths:
             self._last_request = requests.head(r.url,auth=HttpNtlmAuth(self.username,self.password),verify=self.verify)
-            if self._last_request.status_code == 200:
+            if self._last_request.ok:
                 self._instanceof = HttpNtlmAuth
                 self._auth_info={"isTokenBasedSecurity": False}
                 HttpNtlmAuth.__init__(self,self.username,self.password)
