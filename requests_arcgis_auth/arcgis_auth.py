@@ -185,16 +185,25 @@ class ArcGISPortalAuth(ArcGISPortalTokenAuth,HTTPKerberosAuth,HttpNtlmAuth):
         if self._auth_info is None:
             self._determine_auth_handler(r)
 
+    def _set_token_auth_handler(self,r):
+        ArcGISPortalTokenAuth._init(self,r)
+        self._instanceof=ArcGISPortalTokenAuth
+        self._auth_info={"isTokenBasedSecurity": True}
+        return True
+
     def _determine_auth_handler(self,r):
         # Determine the Authenticaiton Handler to use (token, kerberos, NTLM)
 
         # First try the Token Authentication
         self._last_request=requests.head(self._get_token_url(r),verify=self.verify)
         if self._last_request.status_code==200:
-            ArcGISPortalTokenAuth._init(self,r)
-            self._instanceof=ArcGISPortalTokenAuth
-            self._auth_info={"isTokenBasedSecurity": True}
-            return True
+            return self._set_token_auth_handler(r)
+
+        # Had an issue that the HEAD method was not supported.  Catch the 405 error code and try post.
+        elif self._last_request.status_code == 405:
+            self._last_request = requests.post(self._get_token_url(r),verify=self.verify)
+            if self._last_request.status_code == 200:
+                return self._set_token_auth_handler(r)
 
         # If token auth fails, check for "Web-Tier" security
         lr = self._last_request
