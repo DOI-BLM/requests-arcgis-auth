@@ -289,9 +289,17 @@ class ArcGISPortalSAMLAuth(AuthBase):
         orig_params = up.query.split("&")
         for p in orig_params:
             if p != "":                 # Handle empty Parameter List
-                k,v = p.split("=")
-                if k.lower() != "token":
-                    params.update({k:v})
+                splt = p.split("=")
+
+                # scrub out empty parameters
+                if len(splt) > 1:
+                    k = splt[0]     # Parameter Name
+                    v = "=".join(splt[1:])    # Parameter Value.  Could have multiple elements if the value includes a '='
+
+                    # Add the key/value pairs if they are not 'token'
+                    if k.lower() != "token":
+                        params.update({k:v})
+
         up = up._replace(query="")
         prepared_request.prepare_url(up.geturl(), params = params)
 
