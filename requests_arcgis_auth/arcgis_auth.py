@@ -33,8 +33,12 @@ try:
 except:
     from urllib.parse import urlparse
 
-from arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
-from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+try:
+    from arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
+    from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+except:
+    from .arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
+    from .arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
 
 # Added this to be able to execute from PyScripter (which kept throwing errors about not being in a 'package').
 """try:

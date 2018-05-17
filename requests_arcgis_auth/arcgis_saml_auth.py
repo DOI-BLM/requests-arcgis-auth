@@ -5,7 +5,11 @@
     :synopsis: Used for Authentication to a portal with SAML authentication (enterprise logins)
 """
 from datetime import datetime
-from exceptions import ValueError
+try:
+    from exceptions import ValueError
+except:
+    #import ValueError
+    pass
 
 import requests
 from requests.auth import AuthBase
@@ -14,10 +18,17 @@ from requests_ntlm import HttpNtlmAuth
 from bs4 import BeautifulSoup                               # required - pip install --trusted-host pypi.python.org beautifulsoup4
 import re
 
-from urlparse import urlparse
+try:
+    from urlparse import urlparse
+except:
+    from urllib.parse import urlparse
+
 import json
 
-from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+try:
+    from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+except:
+    from .arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
 
 
 class ArcGISPortalSAMLAuth(AuthBase):
@@ -154,7 +165,7 @@ class ArcGISPortalSAMLAuth(AuthBase):
             matches = pattern.search(script_code)
             if matches is not None:
                 js_object = matches.groups()[0]
-                self._oauth_info = json.loads(js_object)
+                self._oauth_info = json.loads(js_object.encode('utf-8'))
                 break
         if self._oauth_info is None or self._oauth_info == {}:
             raise TokenAuthenticationError("{err}; unable to parse response to obtain oAuthInfo".format(err=ERROR_STRING))
