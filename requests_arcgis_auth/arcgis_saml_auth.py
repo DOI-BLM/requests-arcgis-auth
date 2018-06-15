@@ -259,6 +259,11 @@ class ArcGISPortalSAMLAuth(AuthBase):
         # Unable to parse JSON data... requestor could ask for non-JSON formatted data...  Just throw away exception for now...
         except ValueError:
             pass
+
+        # Unable to parse JSON data due to a memory error.  Requestor could ask for a large payload that is not JSON response.  Throw away exception for now and assume the token was still valid.
+        except MemoryError:
+            pass
+
         return resp
 
     def _handle_expired_token(self, resp, **kwargs):
