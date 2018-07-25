@@ -1,35 +1,38 @@
+"""
+.. module:: arcgis_token_auth
+    :platform: Windows
+    :synopsis: Used for Authentication to an Esri ArcGIS Server or Portal.
+        Only Supports Token Authentication
+"""
 
 import os
 from datetime import datetime
 import time
 import warnings
-
-# Ideally pull 'requests' from root install location.  If not we could potentially bundle with the package (bad practice!)
-    # Maybe follow behind requests... put this in a 'packages' folder and note that these are not for modification??  https://github.com/kennethreitz/requests/tree/master/requests/packages
-
 import requests
 from requests.auth import AuthBase
+
+from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+
+# Python v3 commpatability
 try:
     from urllib import urlencode
+    from urlparse import urlparse
 except:
+    from urllib.parse import urlparse
     def urlencode(input_dict):
         return ('&'.join(['{}={}'.format(quote(k, safe='/'), quote(v, safe='/'))
           for k, v in input_dict.items()]))
 
-try:
-    from urlparse import urlparse
-except:
-    from urllib.parse import urlparse
-
 
 # Added this to be able to execute from PyScripter (which kept throwing errors about not being in a 'package').
-try:
-    from .arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
-except:
-    import sys
-    from os import path
-    sys.path.append( path.dirname( path.dirname( path.abspath(__file__) ) ) )
-    from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+##try:
+##    from .arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+##except:
+##    import sys
+##    from os import path
+##    sys.path.append( path.dirname( path.dirname( path.abspath(__file__) ) ) )
+##    from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
 
 """ TODOS
     Try to securely pass it (with post in the body).  Esri does not seem to support that on the admin interface.  For now, just add to the URI parameters
@@ -43,7 +46,7 @@ except:
 
 class ArcGISServerTokenAuth(AuthBase):
     # Esri ArcGIS for Server Authentication Handler to be used with the Requests Package
-    """Python Requests Authentication Handler for the Esri ArcGIS Server product (Stand Alone).  This class only supports the vendor proprietary 'Token Based'TokenAuthenticationError authentication.
+    """Python Requests Authentication Handler for the Esri ArcGIS Server product (Stand Alone).  This class only supports the vendor proprietary 'Token Based' authentication.
 
     Args:
         username (:obj:`str`): Username of user authenticating.

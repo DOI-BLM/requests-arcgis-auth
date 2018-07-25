@@ -1,40 +1,36 @@
 """
 .. module:: arcgis_auth
     :platform: Windows
-    :synopsis: Used for Authentication to an Esri ArcGIS Server or Portal
+    :synopsis: Used for Authentication to an Esri ArcGIS Server or Portal.
+        Supports web-tier security (Kerberos, NTLM) and Token Authentication
 """
 
 import os
 from datetime import datetime
 import time
 import warnings
-#from exceptions import ValueError
-
-# Ideally pull 'requests' from root install location.  If not we could potentially bundle with the package (bad practice!)
-    # Maybe follow behind requests... put this in a 'packages' folder and note that these are not for modification??  https://github.com/kennethreitz/requests/tree/master/requests/packages
-
 import json
 import requests
 from requests.auth import AuthBase
 from requests_kerberos import HTTPKerberosAuth, OPTIONAL
 from requests_ntlm import HttpNtlmAuth
-from bs4 import BeautifulSoup                               # required - pip install --trusted-host pypi.python.org beautifulsoup4
+from bs4 import BeautifulSoup
 import re
+
+from arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
+from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
 
 # Python v3 commpatability
 try:
     from urllib import urlencode
-except:
-    def urlencode(input_dict):
-        return ('&'.join(['{}={}'.format(quote(k, safe='/'), quote(v, safe='/'))
-          for k, v in input_dict.items()]))
-try:
     from urlparse import urlparse
 except:
     from urllib.parse import urlparse
+    def urlencode(input_dict):
+        return ('&'.join(['{}={}'.format(quote(k, safe='/'), quote(v, safe='/'))
+          for k, v in input_dict.items()]))
 
-from arcgis_token_auth import ArcGISServerTokenAuth, ArcGISPortalTokenAuth
-from arcgis_exceptions import TokenAuthenticationError, TokenAuthenticationWarning
+
 
 # Added this to be able to execute from PyScripter (which kept throwing errors about not being in a 'package').
 """try:
