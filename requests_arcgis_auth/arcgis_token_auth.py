@@ -117,8 +117,6 @@ class ArcGISServerTokenAuth(AuthBase):
 
     def _add_token_to_request(self,r):
 
-        # Force the request to POST.  Possible future implicatons here (like if a request only supports GET)
-        r.method="POST"
 
         ### ATTN !!!  Only able to get this to work by adding the token to the URL parameters... not in the body...
         # GOAL was to Add the token to the body (encoded), although when the method is POST and the token is present in the body... the server returns:
@@ -251,8 +249,6 @@ class ArcGISPortalTokenAuth(AuthBase):
 
     def _add_token_to_request(self,r):
 
-        # Force the request to POST.  Possible future implicatons here (like if a request only supports GET)
-        r.method="POST"
 
         ### ATTN !!!  Only able to get this to work by adding the token to the URL parameters... not in the body...
         # GOAL was to Add the token to the body (encoded), although when the method is POST and the token is present in the body... the server returns:

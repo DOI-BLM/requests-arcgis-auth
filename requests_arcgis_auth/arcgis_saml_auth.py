@@ -279,10 +279,6 @@ class ArcGISPortalSAMLAuth(AuthBase):
 
     def _add_token_to_request(self, prepared_request):
 
-        # Add the token to the request
-
-        # Force the request to POST.  Possible future implicatons here (like if a request only supports GET)
-        prepared_request.method="POST"
 
         # Add the token to the request
         if self._token_data.get("access_token") is None:
