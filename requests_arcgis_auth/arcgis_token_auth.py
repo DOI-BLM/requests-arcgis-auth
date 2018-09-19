@@ -69,9 +69,15 @@ class ArcGISServerTokenAuth(AuthBase):
         self._last_request=None
         self._redirect=None                                                 # Only used for debugging... possibly remove?
 
+    @property
+    def token(self):
+        '''Return the access token'''
+        return self._token.get("token")
+
     def __call__(self,r):
 
         # type(r) = PreparedRequest
+        #print r.url
 
         self._init(r)
 
@@ -144,7 +150,9 @@ class ArcGISServerTokenAuth(AuthBase):
             err=self._last_request.json().get("error")
             raise TokenAuthenticationError("Unable to acquire token; {json}".format(json=str(err)))
         self._token['token']=self._last_request.json().get("token")
-        self._expires=datetime.fromtimestamp(self._last_request.json().get("expires")/1000)
+
+        # had to caset 'expires' to int as the /admin/generateToken returns as as a string...
+        self._expires=datetime.fromtimestamp(int(self._last_request.json().get("expires"))/1000)
 
     def _get_url_string(self,r,path):
 
@@ -183,6 +191,12 @@ class ArcGISServerTokenAuth(AuthBase):
             raise TokenAuthenticationError("Unable to acquire token; authInfo JSON Key unavailable at {url}.  HTTP Status Code {sc}".format(url=server_info_url,sc=self._last_request.status_code))
 
         self._auth_info = self._last_request.json().get('authInfo')
+        #print self._auth_info
+
+        # Deal with admin endpoint (issue #34) by checking for the /admin/ in the url path (second position)
+        up=urlparse(r.url)
+        if (up.path.split("/")[2] == 'admin'):
+            self._auth_info['tokenServicesUrl'] = self._get_url_string(r,'/admin/generateToken')
 
 
 class ArcGISPortalTokenAuth(AuthBase):

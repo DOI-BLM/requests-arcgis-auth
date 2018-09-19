@@ -1,4 +1,4 @@
-requests==2.13.0
-requests-kerberos==0.11.0
-requests-ntlm==1.0.0
-beautifulsoup4==4.6.0
+requests>=2.13.0
+requests-kerberos>=0.11.0
+requests-ntlm>=1.0.0
+beautifulsoup4>=4.6.0
