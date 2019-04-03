@@ -147,15 +147,24 @@ class ArcGISPortalSAMLAuth(AuthBase):
             raise TokenAuthenticationError("{err}; HTTP Status Code {sc} from {url}".format(err=ERROR_STRING,sc=response.status_code,url=portal_auth_url))
 
         # Parse the response and obtain authentication information
-        pattern = re.compile('var oAuthInfo = ({.*?});', re.DOTALL)
         soup = BeautifulSoup(response.text, 'html.parser')
         for script in soup.find_all('script'):
             script_code = str(script.string.encode("utf-8")).strip() if script.string is not None else ""
+
+            # Use regex to obtain the oAuthInfo - ORIGINAL PATTERN MATCH: var oAuthInfo = ({.*?});
+            pattern = re.compile('var oAuthInfo = ({.*?});', re.DOTALL)
             matches = pattern.search(script_code)
+
+            # AGOL MAR 2019 Update - Updated pattern match to obtain OAuthInfo
+            if matches is None:
+                pattern = re.compile(r'var oAuthInfo = ({.*}\n?)')
+                matches = pattern.search(script_code)
+
             if matches is not None:
                 js_object = matches.groups()[0]
                 self._oauth_info = json.loads(js_object)
                 break
+
         if self._oauth_info is None or self._oauth_info == {}:
             raise TokenAuthenticationError("{err}; unable to parse response to obtain oAuthInfo".format(err=ERROR_STRING))
 
